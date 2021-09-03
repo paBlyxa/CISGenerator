@@ -1,0 +1,1077 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/LCDM' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK CCDComm
+VAR CONSTANT
+	offSetAddress		:	INT := 12284;
+	cdERROR_VALUE		:	DWORD := 16#7FC00000; (* -1.0 = 16#BF800000, NAN = 7FC *)
+	cCountCCD			: 	INT := 6;
+	timeout : TIME:=T#100ms;
+END_VAR
+VAR_INPUT
+	COMPORT : BYTE;
+	BAUDRATE : COM_BAUDRATE;
+	timeNow :  SysTime64;
+	ixSimulation : BOOL;
+END_VAR
+VAR_IN_OUT
+	CCD_PARAMS : CCDComm_TYPE;
+	status : COM_DIAGN_TYPE;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	SERIAL_INTERFACE_FB : SERIAL_INTERFACE;
+	fbErrorStack : ErrorStack;
+	channel : ARRAY[1..6] OF ARRAY[1..16] OF CCD_AI_TYPE;
+	sxStartSend : BOOL;
+	sxStartQuery : BOOL := TRUE;
+	sxINIT : BOOL;
+	sxINITCCD : BOOL := TRUE;
+	sxERROR : BOOL := FALSE;
+	sxOpenComPort : BOOL := TRUE;
+	siSendLength : INT;
+	siReceiveLengthMustBe : INT;
+	sendBuffer :ARRAY [0..255] OF BYTE;
+	receiveBuffer : typRing_Buffer;
+	i,j: INT;
+	swTempSum: WORD;
+	stStartDelay : TON;
+	swRecvChMask : WORD;
+	siLastReceiveIndex : INT;
+	siLastLastReceiveIndex : INT;
+	siIndexCCD : INT := 1;
+	siCountCircle : INT := 0; 		(* Счетчик запросов *)
+	siCountRequestOk : INT := 0; 	(* Счетчик успешных запросов *)
+	siCountRequestError : INT := 0; (* Счетчик запросов с ошибками *)
+	saErrorLCDM : ARRAY[1..6] OF BOOL;
+	(* Переменные для действия scaleAI *)
+	siIndexChannel: INT;
+	siTempIndexCCD : INT := 1;
+	srTempMax : REAL;	(* Для масштабирования *)
+	srTempMin : REAL;	(* Для масштабирования *)
+	slInMax : DINT;	(* Для масштабирования *)
+	slInMin : DINT;	(* Для масштабирования *)
+	stTimeLate :  SysTime64;
+	sdTimeCirc :  DWORD;
+	sxDEBUG: BOOL;
+	sxReceiveUnknownAddress: BOOL;	(* Принят ответ от неизвестного устройства *)
+	sxReceiveLess : BOOL; 			(* Принято меньше байт, чем должно было быть *)
+	siTcompensation : WORD; 		(* Температура компенсации *)
+	spTempPointer : POINTER TO DWORD;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* *********************************************************************************** *)
+(*                                          ОТПРАВЛЕНИЕ ДАННЫХ                         *)
+(* *********************************************************************************** *)
+IF (sxINITCCD) THEN
+	FOR i := 1 TO CCD_PARAMS.countCCD DO
+		CCD_PARAMS.CCD_PARAM[i].init := TRUE;
+		status.lcdm[i].channelMask := CCD_PARAMS.CCD_PARAM[i].channelMask;
+	END_FOR;
+	FOR i := (CCD_PARAMS.countCCD + 1) TO cCountCCD DO
+		status.lcdm[i].channelMask := 0;
+		status.lcdm[i].status := LCDM_NOT_CONFIGURED;
+	END_FOR;
+	sxINITCCD := FALSE;
+END_IF;
+
+(* Таймаут завершен, формируем следующий запрос *)
+IF (sxStartQuery AND (NOT sxStartSend) AND (CCD_PARAMS.countCCD > 0) AND (SERIAL_INTERFACE_FB.xCOM_PORT_IS_OPEN)) THEN
+
+	(* Проверка, требует ли модуль инициализации, если требует, то формируем соответствующий запрос *)
+	IF (CCD_PARAMS.CCD_PARAM[siIndexCCD].init) THEN
+		CCDComm.queryInit;
+	ELSE
+		 (* Формируем запрос данных *)
+		CCDComm.queryData;
+	END_IF;
+
+	(* Выставляем индекс приема *)
+	siLastReceiveIndex := receiveBuffer.Index;
+
+	CCDComm.checkSum;
+
+	siIndexCCD := siIndexCCD + 1;
+	IF (siIndexCCD > CCD_PARAMS.countCCD) THEN
+		siIndexCCD := 1;
+		siCountCircle := siCountCircle + 1;
+	END_IF;
+
+	sxStartSend := TRUE;
+	sxReceiveLess := FALSE;
+	(*stStartDelay(IN:= FALSE, PT:= timeout);*)
+	sdTimeCirc := TimeNow.ulLow - stTimeLate.ulLow;
+	stTimeLate := timeNow;
+END_IF;
+
+(* *********************************************************************************** *)
+(*                                 ВЫЗОВ ФБ ДЛЯ РАБОТЫ С ПОРТОМ                        *)
+(* *********************************************************************************** *)
+SERIAL_INTERFACE_FB(
+	xOPEN_COM_PORT:= sxOpenComPort,
+	bCOM_PORT_NR:= COMPORT,
+	cbBAUDRATE:= BAUDRATE,
+	cpPARITY:= PARITY_NO,
+	csSTOPBITS:= STOPBITS_1,
+	cbsBYTESIZE:= BS_8,
+	cfFLOW_CONTROL:= NCS_FULLDUPLEX ,
+	iBYTES_TO_SEND:= siSendLength,
+	ptSEND_BUFFER:= ADR(sendBuffer),
+	xSTART_SEND:= sxStartSend,
+	utRECEIVE_BUFFER:= receiveBuffer,
+	bERROR => status.comStatus,
+	xINIT:= sxINIT );
+
+(* *********************************************************************************** *)
+(*                                  ОБРАБОТКА ОШИБОК                                   *)
+(* *********************************************************************************** *)
+IF (status.comStatus <> 0) THEN
+	sxERROR := TRUE;
+	fbErrorStack(iiErrorCode:= 1, iiSubErrorCode:= status.comStatus);
+END_IF;
+
+(* *********************************************************************************** *)
+(*                                    ПРИЕМ ДАННЫХ                                     *)
+(* *********************************************************************************** *)
+(* Таймаут между посылками *)
+IF (NOT sxDEBUG) THEN
+	stStartDelay(IN:= ((NOT sxStartQuery) AND (siLastReceiveIndex = receiveBuffer.Index) OR sxReceiveLess), PT:= timeout);
+	sxStartQuery := FALSE;
+	IF (stStartDelay.Q) THEN
+		(* Таймаут прошел, LCDM не отвечает - формируем ошибку *)
+		CCDComm.doErrorStatus;
+		sxStartSend := FALSE;
+		sxStartQuery := TRUE;
+		fbErrorStack(iiErrorCode:= 3, iiSubErrorCode:= SHL(sendBuffer[0],8) + sendBuffer[1]);
+		siCountRequestError := siCountRequestError + 1;
+	END_IF;
+ELSE
+	sxStartQuery := FALSE;
+END_IF;
+
+IF (siLastReceiveIndex <> receiveBuffer.Index) THEN
+	(* Если принято байт столько, сколько ожидаем *)
+	IF (   ((receiveBuffer.Index - siLastReceiveIndex) = siReceiveLengthMustBe) OR
+		  ((receiveBuffer.Index + (256 - siLastReceiveIndex))  = siReceiveLengthMustBe)   ) THEN
+		CCDComm.receive;
+	(* Если принято байт больше, чем ожидали *)
+	ELSIF ( ((receiveBuffer.Index - siLastReceiveIndex) > siReceiveLengthMustBe) OR
+		  (((receiveBuffer.Index < siLastReceiveIndex) AND (receiveBuffer.Index + (256 - siLastReceiveIndex))  > siReceiveLengthMustBe))   ) THEN
+		CCDComm.receive;
+	ELSIF ((receiveBuffer.Data[siLastReceiveIndex] = 16#FA) OR (receiveBuffer.Data[siLastReceiveIndex] = 16#FB)) THEN
+		sxERROR := TRUE;
+		fbErrorStack(iiErrorCode:= receiveBuffer.Data[siLastReceiveIndex], iiSubErrorCode:= 0);
+		siLastLastReceiveIndex := siLastReceiveIndex;
+		siLastReceiveIndex := receiveBuffer.Index;
+		siCountRequestError := siCountRequestError + 1;
+		CCDComm.doErrorStatus;
+	ELSE (* Принято меньше, чем должно быть *)
+		sxReceiveLess := TRUE;
+	END_IF;
+END_IF;
+
+IF (CCD_PARAMS.countCCD = 0) THEN
+	status.comStatus := NON_CONFIGURATION;
+END_IF;
+END_FUNCTION_BLOCK
+ACTION	checkSum:
+(* *********************************************************************************************************************** *)
+(*                                                                   Подсчет контрольной суммы                                                                              *)
+(* *********************************************************************************************************************** *)
+
+swTempSum := 0;
+FOR i:=0 TO siSendLength-3 DO
+	swTempSum := swTempSum + sendBuffer[i];
+END_FOR;
+sendBuffer[siSendLength - 2] := WORD_TO_BYTE(swTempSum AND 16#FF);
+sendBuffer[siSendLength - 1] := WORD_TO_BYTE(SHR(swTempSum AND 16#FF00,8));
+END_ACTION
+
+ACTION	doErrorStatus:
+FOR i := 1 TO CCD_PARAMS.countCCD DO
+	IF (CCD_PARAMS.CCD_PARAM[i].address = sendBuffer[1]) THEN
+		IF (saErrorLCDM[i]) THEN
+			status.lcdm[i].status := LCDM_TIMEOUT_ERROR;
+			status.lcdm[i].channelStatus := 16#FFFF;
+			FOR j := 1 TO 16 DO
+				(*spTempPointer := ADR(channel[i][j].value);
+				spTempPointer^ := cdERROR_VALUE;*)
+				channel[i][j].value := CCD_PARAMS.CCD_PARAM[i].channel[j].sensorMin -
+						(CCD_PARAMS.CCD_PARAM[i].channel[j].sensorMax - CCD_PARAMS.CCD_PARAM[i].channel[j].sensorMin) * 0.1;
+				channel[i][j].stat := 1;
+				(*channel[i][j].newData := FALSE;*)
+				IF ((CCD_PARAMS.CCD_PARAM[i].channel[j].regAddress > 0) AND (NOT ixSimulation)) THEN
+					realValue[(CCD_PARAMS.CCD_PARAM[i].channel[j].regAddress - offSetAddress) / 4].value := channel[i][j].value;
+					realValue[(CCD_PARAMS.CCD_PARAM[i].channel[j].regAddress - offSetAddress) / 4].stat := channel[i][j].stat;
+				END_IF;
+			END_FOR;
+		END_IF;
+		saErrorLCDM[i] := TRUE;
+	END_IF;
+END_FOR;
+END_ACTION
+
+ACTION	queryData:
+(* *********************************************************************************************************************** *)
+(*                                                                     Формируем запрос данных                                                                                *)
+(* *********************************************************************************************************************** *)
+
+sendBuffer[0] := 16#02;																	(* Тип сообщения - запрос данных *)
+sendBuffer[1] := CCD_PARAMS.CCD_PARAM[siIndexCCD].address; 											(* Номер узла *)
+sendBuffer[2] := WORD_TO_BYTE(CCD_PARAMS.CCD_PARAM[siIndexCCD].channelMask AND 16#FF);				(* Слова флагов *)
+sendBuffer[3] := WORD_TO_BYTE(SHR(CCD_PARAMS.CCD_PARAM[siIndexCCD].channelMask AND 16#FF00, 8));	(* запроса данных по каналам *)
+siSendLength := 4;
+
+(* Расчет количества байт, которые должны прийти в ответ *)
+swRecvChMask := CCD_PARAMS.CCD_PARAM[siIndexCCD].channelMask;
+siReceiveLengthMustBe := 6;
+FOR i:= 0 TO 15 DO
+	IF (  (swRecvChMask AND 1)  = 1) THEN
+		siReceiveLengthMustBe := siReceiveLengthMustBe + 3;
+		(* Расчет количества каналов, запрограммированных на работу с ЦИП типа DMC-TC *)
+		IF ((INT_TO_WORD(CCD_PARAMS.CCD_PARAM[siIndexCCD].channel[i + 1].typeCh) AND 16#E0) = 16#80) THEN
+			(* Тип ЦИП - DMC-TC *)
+			sendBuffer[0] := sendBuffer[0] + 2; (* Поле кода команды содержит сумму базового кода (02) и удвоенного количества передаваемых значений холодного спая *)
+			IF (CCD_PARAMS.CCD_PARAM[siIndexCCD].channel[i + 1].adrCompensation > 0) THEN
+				siTcompensation := REAL_TO_INT(realValue[(CCD_PARAMS.CCD_PARAM[siIndexCCD].channel[i + 1].adrCompensation - offSetAddress) / 4].value * 100);
+			ELSE
+				siTcompensation := 0;
+			END_IF;
+			sendBuffer[siSendLength] := WORD_TO_BYTE(siTcompensation AND 16#FF);
+			sendBuffer[siSendLength + 1] := WORD_TO_BYTE(SHR(siTcompensation  AND 16#FF00, 8));
+			siSendLength := siSendLength + 2;
+		END_IF;
+	END_IF;
+	swRecvChMask := SHR(swRecvChMask, 1);
+END_FOR;
+
+siSendLength := siSendLength + 2; (* + два байта контрольной суммы *)
+END_ACTION
+
+ACTION	queryInit:
+(* *********************************************************************************************************************** *)
+(*                                                          Формируем запрос инициализации                                                                           *)
+(* *********************************************************************************************************************** *)
+
+sendBuffer[0] := 16#01;																	(* Тип сообщения - запрос инициализации *)
+sendBuffer[1] := CCD_PARAMS.CCD_PARAM[siIndexCCD].address;								(* Номер узла *)
+FOR i := 1 TO 16 DO
+	sendBuffer[1 + i] := INT_TO_BYTE(CCD_PARAMS.CCD_PARAM[siIndexCCD].channel[i].typeCh);	(* Тип модуля *)
+	sendBuffer[17 + i] := 1;																(* Усреднение *)
+END_FOR;
+siSendLength := 36;
+
+(* Расчет количества байт, которые должны прийти в ответ *)
+siReceiveLengthMustBe := 36;
+END_ACTION
+
+ACTION	receive:
+(* Приняты новые данные *)
+
+siLastLastReceiveIndex := siLastReceiveIndex;
+
+CASE receiveBuffer.Data[siLastReceiveIndex] OF
+
+	16#F1 : (* Ответ на запрос инициализации *)
+	sxReceiveUnknownAddress := TRUE;
+	FOR i:= 1 TO CCD_PARAMS.countCCD DO
+		IF (CCD_PARAMS.CCD_PARAM[i].address = receiveBuffer.Data[siLastReceiveIndex + 1]) THEN
+			CCD_PARAMS.CCD_PARAM[i].init := FALSE;
+			sxReceiveUnknownAddress := FALSE;
+			status.lcdm[i].status := LCDM_OK;
+			saErrorLCDM[i] := FALSE;
+			sxERROR := FALSE;
+			EXIT;
+		END_IF;
+	END_FOR;
+	siLastReceiveIndex := siLastReceiveIndex + 36;
+	siCountRequestOk := siCountRequestOk + 1;
+	IF (sxReceiveUnknownAddress) THEN
+		sxERROR := TRUE;
+		fbErrorStack(iiErrorCode:= 4, iiSubErrorCode:= receiveBuffer.Data[siLastReceiveIndex + 1]);
+	END_IF;
+
+	16#F2 : (* Ответ на запрос данных *)
+		scaleAI();
+		siCountRequestOk := siCountRequestOk + 1;
+		sxERROR := FALSE;
+
+	16#FA : (* Несоответствие контрольной сумме *)
+		fbErrorStack(iiErrorCode:= 16#FA, iiSubErrorCode:= 0);
+		sxERROR := TRUE;
+		siCountRequestError := siCountRequestError + 1;
+		CCDComm.doErrorStatus;
+
+	16#FB : (* Неверный формат запроса *)
+		fbErrorStack(iiErrorCode:= 16#FB, iiSubErrorCode:= 0);
+		sxERROR := TRUE;
+		siCountRequestError := siCountRequestError + 1;
+		CCDComm.doErrorStatus;
+	ELSE
+		(* Неизвестный тип запроса *)
+		fbErrorStack(iiErrorCode:= 2, iiSubErrorCode:= receiveBuffer.Data[siLastReceiveIndex]);
+		sxERROR := TRUE;
+		siCountRequestError := siCountRequestError + 1;
+		CCDComm.doErrorStatus;
+END_CASE;
+
+IF ((NOT sxDEBUG) AND (NOT sxERROR)) THEN
+	sxStartQuery := TRUE;
+END_IF;
+END_ACTION
+
+ACTION	scaleAI:
+(* *********************************************************************************************************************** *)
+(*                                         Разбор принятых данных в структуру аналоговых сигналов                                                 *)
+(* *********************************************************************************************************************** *)
+
+sxReceiveUnknownAddress := TRUE;
+FOR siTempIndexCCD := 1 TO CCD_PARAMS.countCCD DO
+	IF (CCD_PARAMS.CCD_PARAM[siTempIndexCCD].address = receiveBuffer.Data[siLastReceiveIndex + 1]) THEN
+		sxReceiveUnknownAddress := FALSE;
+		status.lcdm[siTempIndexCCD].status := LCDM_OK;
+		saErrorLCDM[siTempIndexCCD] := FALSE;
+		EXIT;
+	END_IF;
+END_FOR;
+IF (sxReceiveUnknownAddress) THEN
+	fbErrorStack(iiErrorCode:= 4, iiSubErrorCode:= receiveBuffer.Data[siLastReceiveIndex + 1]);
+	sxERROR := TRUE;
+	RETURN;
+END_IF;
+(* Слово флагов - наличия данных по каналам *)
+swRecvChMask := receiveBuffer.Data[siLastReceiveIndex + 2] + SHL(receiveBuffer.Data[siLastReceiveIndex + 3], 8);
+siIndexChannel := 0;
+FOR i:=0 TO 15 DO
+
+	(* Если в слове флагов данный канал присутствует, то сохраняем полученные по нему данные *)
+	IF (  (swRecvChMask AND 1)  = 1) THEN
+
+		channel[siTempIndexCCD][i + 1].stat := 0; (* Сброс статуса *)
+
+(* **************************** ИНФОРМАЦИЯ ПО КАНАЛУ *********************************************)
+		(* Биты 0...18 - абсолютное значение *)
+		channel[siTempIndexCCD][i + 1].intValue := receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 4 + siIndexChannel)] + SHL(receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 5 + siIndexChannel)], 8)
+				 + SHL((receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 6 + siIndexChannel)] AND 16#7), 16);
+		(* Бит 19 - знак измеренного значения: "0" - плюс, "1" - минус *)
+		channel[siTempIndexCCD][i + 1].sign :=receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 6 + siIndexChannel)].3;
+		(* Биты 20, 21 - тип подключенного цип *)
+		channel[siTempIndexCCD][i + 1].typeDMC := BOOL_TO_WORD(receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 6 + siIndexChannel)].4) + SHL(BOOL_TO_WORD(receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 6 + siIndexChannel)].5),1);
+		IF (channel[siTempIndexCCD][i + 1].typeDMC = DMC_ERROR) THEN
+			(* Тип ЦИП не соответствует градуировки *)
+			channel[siTempIndexCCD][i + 1].info.4 := 1;
+			status.lcdm[siTempIndexCCD].channelStatus := status.lcdm[siTempIndexCCD].channelStatus OR SHL(WORD#1, i);
+			channel[siTempIndexCCD][i + 1].stat.0 := TRUE;
+			(*spTempPointer := ADR(channel[siTempIndexCCD][i + 1].value);
+			spTempPointer^ := cdERROR_VALUE;*)
+			channel[siTempIndexCCD][i + 1].value := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin -
+						(CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax - CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin) * 0.1;
+		ELSE
+			channel[siTempIndexCCD][i + 1].info.4 := 0;
+		END_IF;
+		channel[siTempIndexCCD][i + 1].info.0 := channel[siTempIndexCCD][i + 1].typeDMC.0;
+		channel[siTempIndexCCD][i + 1].info.1 := channel[siTempIndexCCD][i + 1].typeDMC.1;
+		channel[siTempIndexCCD][i + 1].info.2 := channel[siTempIndexCCD][i + 1].typeDMC.2;
+		(* Бит 22 - тип измерительной цепи *)
+		channel[siTempIndexCCD][i + 1].typeCirc := BOOL_TO_WORD(receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 6 + siIndexChannel)].6);
+		channel[siTempIndexCCD][i + 1].info.5 := (channel[siTempIndexCCD][i + 1].typeCirc = 1);
+		(* Бит 23 - флаг обновления данных *)
+		channel[siTempIndexCCD][i + 1].newData := receiveBuffer.Data[INT_TO_BYTE(siLastReceiveIndex + 6 + siIndexChannel)].7;
+		channel[siTempIndexCCD][i + 1].info.7 := channel[siTempIndexCCD][i + 1].newData;
+
+(* *************************** Масштабирование полученного значения ********************************* *)
+
+		IF (NOT channel[siTempIndexCCD][i + 1].info.4) THEN
+			(* У сырого типа данных, обрыв отличается от других *)
+			IF (CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].typeCh = 0) THEN
+				IF (channel[siTempIndexCCD][i + 1].intValue = 16#7FFF) THEN
+					(* Обрыв *)
+					channel[siTempIndexCCD][i + 1].stat.1 := TRUE;
+					channel[siTempIndexCCD][i + 1].stat.0 := TRUE;
+					(*spTempPointer := ADR(channel[siTempIndexCCD][i + 1].value);
+					spTempPointer^ := cdERROR_VALUE;*)
+					channel[siTempIndexCCD][i + 1].value := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin -
+						(CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax - CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin) * 0.1;
+					status.lcdm[siTempIndexCCD].channelStatus := status.lcdm[siTempIndexCCD].channelStatus OR SHL(WORD#1, i);
+				END_IF;
+			ELSE
+				IF (channel[siTempIndexCCD][i + 1].intValue = 16#7FFFF) THEN
+					(* Обрыв *)
+					channel[siTempIndexCCD][i + 1].stat.1 := TRUE;
+					channel[siTempIndexCCD][i + 1].stat.0 := TRUE;
+					(*spTempPointer := ADR(channel[siTempIndexCCD][i + 1].value);
+					spTempPointer^ := cdERROR_VALUE;*)
+					channel[siTempIndexCCD][i + 1].value := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin -
+						(CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax - CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin) * 0.1;
+					status.lcdm[siTempIndexCCD].channelStatus := status.lcdm[siTempIndexCCD].channelStatus OR SHL(WORD#1, i);
+				END_IF;
+			END_IF;
+
+			(* Если не обрыв, то масшабируем значение *)
+			IF (NOT channel[siTempIndexCCD][i + 1].stat.0) THEN
+				IF (channel[siTempIndexCCD][i + 1].sign) THEN
+					channel[siTempIndexCCD][i + 1].intValue := -channel[siTempIndexCCD][i + 1].intValue;
+				END_IF;
+				CASE CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].typeCh OF
+					0: (* Сырое значение *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax := 100;
+						slInMin := 0;
+
+					16#01..16#8D : (* Температура *)
+						srTempMax := 1.0; (* значение приходит в 0.01 гр. *)
+						srTempMin := 0.0;
+						slInMax := 100;
+						slInMin := 0;
+
+					16#C0 : (* Вольты 0 ... 1 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  24000; (* значение приходит в 1/24 мВ: 1 В * 24 мВ = 24000 *)
+						slInMin := 0;
+
+					16#1C0 : (* Миливольты 0 ... 500 мВ, в Ракурсу 0 ... 1 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  12000; (* значение приходит в 1/24 мВ: 0.5 В * 24 мВ = 12000 *)
+						slInMin := 0;
+
+					16#C1 : (* Вольты 0 ... 5 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  120000; (* значение приходит в 1/24 мВ: 5 В * 24 мВ = 120000 *)
+						slInMin := 0;
+
+					16#C2 : (* Вольты 0 ... 10 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  240000; (* значение приходит в 1/24 мВ: 10 В * 24 мВ = 240000 *)
+						slInMin := 0;
+
+					16#C3 : (* Вольты -5 ... 5 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  120000; (* значение приходит в 1/24 мВ: 5 В * 24 мВ = 120000 *)
+						slInMin := -120000; (* значение приходит в 1/24 мВ: -5 В * 24 мВ = -120000 *)
+
+					16#C4 : (* Вольты -10 ... 10 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  240000; (* значение приходит в 1/24 мВ: 5 В * 24 мВ = 240000 *)
+						slInMin := -240000; (* значение приходит в 1/24 мВ: -5 В * 24 мВ = -240000 *)
+
+					16#C5 : (* Вольты 1 ... 5 В *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax :=  120000; (* значение приходит в 1/24 мВ: 5 В * 24 мВ = 120000 *)
+						slInMin := 24000; (* значение приходит в 1/24 мВ: 1 В * 24 мВ = 24000 *)
+
+					16#E0: (* Ток 0 ... 5 мА *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax := 60000; (* значение приходит в 1/12 мкА: 5 мА * 12 мКа  = 60000 мкА *)
+						slInMin := 0;
+
+					16#E1: (* Ток -5 ... 5 мА *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax := 60000; (* значение приходит в 1/12 мкА: 5 мА * 12 мКа  = 60000 мкА *)
+						slInMin := -60000;	(* значение приходит в 1/12 мкА: -5 мА * 12 мКа  = -60000 мкА *)
+
+					16#E2: (* Ток 0 ... 20 мА *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax := 240000; (* значение приходит в 1/12 мкА: 20 мА * 12 мКа = 240000 мкА *)
+						slInMin := 0;
+
+					16#E3: (* Ток 4 ... 20 мА *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						slInMax := 240000; (* значение приходит в 1/12 мкА: 20 мА * 12 мКа = 240000 мкА *)
+						slInMin := 48000;	
+
+					16#1E3: (* Ток 20 ... 4 мА *)
+						srTempMax := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;
+						srTempMin := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax;
+						slInMax := 240000; (* значение приходит в 1/12 мкА: 20 мА * 12 мКа = 240000 мкА *)
+						slInMin := 48000;		(* значение приходит в 1/12 мкА: 4 мА * 12 мКа = 48000 мкА *)
+
+				ELSE
+					(* Неизвестный тип градуировки *)
+					channel[siTempIndexCCD][i + 1].stat.0 := TRUE;
+					status.lcdm[siTempIndexCCD].channelStatus := status.lcdm[siTempIndexCCD].channelStatus OR SHL(WORD#1, i);
+					(*spTempPointer := ADR(channel[siTempIndexCCD][i + 1].value);
+					spTempPointer^ := cdERROR_VALUE;*)
+					channel[siTempIndexCCD][i + 1].value := CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin -
+						(CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax - CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin) * 0.1;
+				END_CASE;
+
+				IF (NOT channel[siTempIndexCCD][i + 1].stat.0) THEN
+					(*channel[siTempIndexCCD][i + 1].value := (DINT_TO_REAL(channel[siTempIndexCCD][i + 1].intValue) - srTempMin) / (srTempMax - srTempMin)
+																		* (CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMax - CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin)
+																		+ CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].sensorMin;*)
+					channel[siTempIndexCCD][i + 1].value := Scale(channel[siTempIndexCCD][i + 1].intValue,
+							srTempMax, srTempMin,
+							slInMax, slInMin);
+
+	(* ********************************** СТАТУС ************************************************ *)
+					status.lcdm[siTempIndexCCD].channelStatus := status.lcdm[siTempIndexCCD].channelStatus AND (NOT SHL(WORD#1, i));
+					(*IF (CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].value > CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].highValue) THEN
+						(* За пределами H *)
+						CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].stat.2 := TRUE;
+					ELSIF (CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].value < CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].lowValue) THEN
+						(* За пределами L *)
+						CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].stat.6 := TRUE;
+					ELSE
+						(* НОРМА *)
+						CCD_PARAMS.CCD_PARAM[tempIndexCCD].channel[i + 1].stat.4 := TRUE;
+					END_IF;*)
+				END_IF;
+			END_IF;
+		END_IF;
+		siIndexChannel := siIndexChannel + 3;
+	END_IF;
+		IF ((CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].regAddress > 0) AND (NOT ixSimulation)) THEN
+			realValue[(CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].regAddress - offSetAddress) / 4].value := channel[siTempIndexCCD][i + 1].value;
+			realValue[(CCD_PARAMS.CCD_PARAM[siTempIndexCCD].channel[i + 1].regAddress - offSetAddress) / 4].stat := channel[siTempIndexCCD][i + 1].stat;
+		END_IF;
+	swRecvChMask := SHR(swRecvChMask, 1);
+END_FOR;
+END_ACTION
+
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/LCDM' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK ErrorStack (* Реализует стэк ошибок *)
+VAR CONSTANT
+	ciSTACK_LENGTH : INT:= 10;
+END_VAR
+VAR_INPUT
+	iiErrorCode : INT;
+	iiSubErrorCode : INT;
+END_VAR
+VAR
+	saErrorCode : ARRAY[1..ciSTACK_LENGTH] OF ERROR_TYPE;
+	siIndex : INT := 1;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* Добавляем новую ошибку в стэк *)
+saErrorCode[siIndex].errorCode := iiErrorCode;
+saErrorCode[siIndex].subErrorCode := iiSubErrorCode;
+siIndex := siIndex + 1;
+IF (siIndex > ciSTACK_LENGTH) THEN
+	siIndex := 1;
+END_IF;
+END_FUNCTION_BLOCK
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/LCDM' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION Scale : REAL
+VAR_INPUT
+	intValue : DINT;	(* Сырое значение с входа *)
+	sensorMax : REAL;	(* Максимальное смасштабированное значение сигнала *)
+	sensorMin : REAL;	(* Минимальное смасштабированное значение сигнала *)
+	rawMax : REAL;		(* Максимальное значение с датчика (20 мА) или с АЦП *)
+	rawMin : REAL;		(* Минимальное значение с датчика (4 мА) или с АЦП *)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+Scale := (DINT_TO_REAL(intValue) - rawMin)/(rawMax - rawMin) * (sensorMax - sensorMin) + sensorMin;
+END_FUNCTION
+
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/LCDM' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM readWriteCCDParams
+VAR CONSTANT
+	RESPONSE_OK_CODE : INT := 16#1000;
+	RESPONSE_ERROR_CODE : INT := -4096;
+	MIN_COM_NUM : INT := 2;
+	MAX_COM_NUM : INT := 6;
+	MAX_LCDM_NUM : INT := 6;
+END_VAR
+VAR
+	i : INT;
+	liNumCom : INT;
+	liNumLCDM : INT;
+	lpAdrReal : POINTER TO REAL;
+	lxCheckComPort : BOOL;
+	lxCheckLCDMnum : BOOL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+CASE (gaRWparams[1] AND 16#FF00) OF
+
+	16#0100 : (* Запрос на чтение параметров LCDM *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			gaRWparams[2] := CCD_PARAMS[liNumCom].countCCD;
+			(*FOR i:=1 TO CCD_PARAMS[liNumCom].countCCD DO
+				gaRWparams[1+i*2] := CCD_PARAMS[liNumCom].CCD_PARAM[i].address;
+				gaRWparams[2+i*2] := CCD_PARAMS[liNumCom].CCD_PARAM[i].channelMask;
+			END_FOR;*)
+			gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+		END_IF;
+
+	16#0200 : (* Запрос на запись параметров LCDM *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			IF ((gaRWparams[2] >= 0) AND (gaRWparams[2] <= MAX_LCDM_NUM)) THEN
+				CCD_PARAMS[liNumCom].countCCD := gaRWparams[2];
+				(*FOR i:=1 TO CCD_PARAMS[liNumCom].countCCD DO
+					CCD_PARAMS[liNumCom].CCD_PARAM[i].address := WORD_TO_BYTE(gaRWparams[1+i*2]);
+					CCD_PARAMS[liNumCom].CCD_PARAM[i].channelMask := gaRWparams[2+i*2];
+					comStatus[liNumCom].lcdm[i].channelMask := gaRWparams[[2+i*2];
+				END_FOR;*)
+				gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+			ELSE
+				gaRWparams[1] := gaRWparams[1] + RESPONSE_ERROR_CODE;
+			END_IF;
+		END_IF;
+
+	16#0300 : (* Запрос на чтение параметров одного канала *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			getAndCheckLCDMnum();
+			IF (lxCheckLCDMnum) THEN
+				gaRWparams[3] := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].regAddress;
+				lpAdrReal := ADR(gaRWparams[4]);
+				lpAdrReal^ := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].sensorMax;
+				lpAdrReal := ADR(gaRWparams[6]);
+				lpAdrReal^ := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].sensorMin;
+				gaRWparams[8] := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].typeCh;
+				gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+			END_IF;
+		END_IF;
+
+	16#0400 : (* Запрос на запись параметров одного канала *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			getAndCheckLCDMnum();
+			IF (lxCheckLCDMnum) THEN
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].regAddress := gaRWparams[3];
+				lpAdrReal := ADR(gaRWparams[4]);
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].sensorMax := lpAdrReal^;
+				lpAdrReal := ADR(gaRWparams[6]);
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].sensorMin := lpAdrReal^;
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[gaRWparams[2]].typeCh := gaRWparams[8];
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].init := TRUE;
+				gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+			END_IF;
+		END_IF;
+
+	16#0500 : (* Запрос на чтение параметров одного LCDM с параметрами каналов *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			getAndCheckLCDMnum();
+			IF (lxCheckLCDMnum) THEN
+				gaRWparams[2] := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].address;
+				gaRWparams[3] := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channelMask;
+				FOR i := 1 TO 16 DO
+					gaRWparams[i*6 - 2] := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].regAddress;
+					lpAdrReal := ADR(gaRWparams[i*6 - 1]);
+					lpAdrReal^ := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].sensorMax;
+					lpAdrReal := ADR(gaRWparams[i*6 + 1]);
+					lpAdrReal^ := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].sensorMin;
+					gaRWparams[i*6 + 3] := CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].typeCh;
+				END_FOR;
+				gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+			END_IF;
+		END_IF;
+
+	16#0600 : (* Запрос на запись параметров одного LCDM с параметрами каналов *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			getAndCheckLCDMnum();
+			IF (lxCheckLCDMnum) THEN
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].address := WORD_TO_BYTE(gaRWparams[2]);
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channelMask := gaRWparams[3];
+				comStatus[liNumCom].lcdm[liNumLCDM].channelMask := gaRWparams[3];
+				FOR i := 1 TO 16 DO
+					CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].regAddress := gaRWparams[i*6 - 2];
+					lpAdrReal := ADR(gaRWparams[i*6 - 1]);
+					CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].sensorMax := lpAdrReal^;
+					lpAdrReal := ADR(gaRWparams[i*6 + 1]);
+					CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].sensorMin := lpAdrReal^;
+					CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].channel[i].typeCh := gaRWparams[i*6 + 3];
+				END_FOR;
+				CCD_PARAMS[liNumCom].CCD_PARAM[liNumLCDM].init := TRUE;
+				gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+			END_IF;
+		END_IF;
+
+	16#0700 : (* Запрос на чтение диагностики *)
+		getAndCheckComPort();
+		IF (lxCheckComPort) THEN
+			gaRWparams[2] := CCD_PARAMS[liNumCom].countCCD;
+			gaRWparams[3] := comStatus[liNumCom].comStatus;
+			FOR i := 1 TO CCD_PARAMS[liNumCom].countCCD DO
+				gaRWparams[1 + i * 3] := comStatus[liNumCom].lcdm[i].status;
+				gaRWparams[2 + i * 3] := comStatus[liNumCom].lcdm[i].channelStatus;
+				gaRWparams[3 + i * 3] := CCD_PARAMS[liNumCom].CCD_PARAM[i].channelMask;
+			END_FOR;
+			gaRWparams[1] := gaRWparams[1] + RESPONSE_OK_CODE;
+		END_IF;
+END_CASE;
+END_PROGRAM
+ACTION	getAndCheckComPort:
+liNumCom := SHR(gaRWparams[1] AND 16#F0, 4); 						(* Извлекаем номер COM порта из запроса *)
+IF ((liNumCom >= MIN_COM_NUM) AND (liNumCom <= MAX_COM_NUM)) THEN	(* Проверяем номер COM порта *)
+	lxCheckComPort := TRUE;
+ELSE
+	gaRWparams[1] := gaRWparams[1] + RESPONSE_ERROR_CODE;			(* Выставляем код ошибки запроса *)
+	lxCheckComPort := FALSE;
+END_IF;
+END_ACTION
+
+ACTION	getAndCheckLCDMnum:
+liNumLCDM := gaRWparams[1] AND 16#0F;						(* Извлекаем номер LCDM *)
+IF ((liNumLCDM >= 1) AND (liNumLCDM <= MAX_LCDM_NUM)) THEN	(* Проверяем номер LCDM *)
+	lxCheckLCDMnum := TRUE;
+ELSE
+	gaRWparams[1] := gaRWparams[1] + RESPONSE_ERROR_CODE;	(* Выставляем код ошибки запроса *)
+	lxCheckLCDMnum := FALSE;
+END_IF;
+END_ACTION
+
+
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/LCDM' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM SCALE_ALL_AI
+VAR
+    CCDComm : ARRAY [2..7] OF CCDComm;
+
+    INIT : BOOL := FALSE;
+    i : INT;
+    j : INT;
+	var1 : INT;
+	adr1 : POINTER TO CCDComm;
+	var2 : INT;
+	var3 : WORD;
+	CurTime : CurTime;
+	timeNow :  SysTime64;
+	k: INT;
+	sxSimulation : BOOL := FALSE;
+	stTimerSim : TON;
+	srSimValue : REAL := 0.0;
+	stSimRate : TIME := T#1s;
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+IF (GlobalInit) THEN
+	CCDParamsInit();
+	INIT := TRUE;
+END_IF;
+
+CurTime(SystemTime:= timeNow);
+
+FOR i := 2 TO 6 DO
+	CCDComm[i](COMPORT:= INT_TO_BYTE(i), BAUDRATE:= BAUD_115200, CCD_PARAMS := CCD_PARAMS[i], ixSimulation := sxSimulation, timeNow := timeNow, status := comStatus[i]);
+END_FOR;
+
+IF (sxSimulation) THEN
+	stTimerSim(IN:= TRUE, PT:=stSimRate);
+	IF (stTimerSim.Q) THEN
+		srSimValue := SIN(timeNow.ulLow / 10000000.0);
+		FOR i := 2 TO 6 DO
+			FOR j := 1 TO CCD_PARAMS[i].countCCD DO
+				FOR k := 1 TO 16 DO
+					IF (CCD_PARAMS[i].CCD_PARAM[j].channel[k].regAddress > 0) THEN
+						realValue[(CCD_PARAMS[i].CCD_PARAM[j].channel[k].regAddress - CCDComm[i].offSetAddress) / 4].value :=
+								srSimValue * (CCD_PARAMS[i].CCD_PARAM[j].channel[k].sensorMax - CCD_PARAMS[i].CCD_PARAM[j].channel[k].sensorMin) + CCD_PARAMS[i].CCD_PARAM[j].channel[k].sensorMin;
+						realValue[(CCD_PARAMS[i].CCD_PARAM[j].channel[k].regAddress - CCDComm[i].offSetAddress) / 4].stat := 0
+								(*BOOL_TO_INT(NOT realValue[(CCD_PARAMS[i].CCD_PARAM[j].channel[k].regAddress - CCDComm[i].offSetAddress) / 4].stat.0)*);
+					END_IF;
+				END_FOR;
+			END_FOR;
+		END_FOR;
+		stTimerSim(IN:= FALSE, PT:=stSimRate);
+	END_IF;
+END_IF;
+END_PROGRAM
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CCD_AI_PARAM_TYPE :
+STRUCT
+	regAddress : INT;				(* Адрес регистра *)
+	sensorMax : REAL;				(* Максимальное значение *)
+	sensorMin : REAL;				(* Минимальное значение *)
+	adrCompensation : INT;			(* Адрес значения температуры компенсации *)
+	typeCh : CCD_TYPE;				(* Тип градуировки *)
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CCD_AI_TYPE :
+STRUCT
+	value : REAL;					(* Значение приведенное к диапазону *)
+	stat : BYTE;					(* Статус: Бит 0 - обобщенная неисправность, Бит 1 - H, 2 - За пределами H, 3 - Обрыв верхний, 4 - Норма, 5 - L, 6 - За пределами L, 7 - Обрыв нижний *)
+	info : BYTE;					(* Информация: Биты 0 -2: тип ЦИП, 010 -AI, 00 - RT, 001 - TC; Бит 3 - измерение напряжения, Бит 4 - тип ЦИП не соответствует градуировки, Бит 5 - 6: для RT - схема, 00 - 3х провод, 01 - 4х провод, Бит 7 - флаг обновления данных *)
+	intValue : DINT;				(* Значение полученное от ЦИП, биты 0 - 18 *)
+	sign : BOOL;					(* Бит 19 - знак выражения: 0 - плюс, 1 - минус. При измерении сопротивления не определен *)
+	typeDMC : CCD_DMC_TYPE; 		(* Бит 20, 21 - тип подключенного преобразователя *)
+	typeCirc : TYPE_CIRC; 			(* Бит 22 - тип измерительной цепи *)
+	newData : BOOL; 				(* Бит 23 - флаг обновления данных: 0 - нет обновления, 1 - есть обновление *)
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CCD_DMC_TYPE :
+(
+	DMC_RTI := 2#00,
+	DMC_TC := 2#01,
+	DMC_AI := 2#10,
+	DMC_ERROR := 2#11 (* тип подключенного преобразователя не соответствует типу градуировки *)
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* Ошибка связи с модулями LCDM-RS422 *)
+TYPE CCD_ERROR :(
+	CHECK_SUM_ERROR := 16#FA, (* Несоответствие контрольной сумме *)
+	FORMAT_ERROR := 16#FB (* Неверный формат запроса *)
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE ERROR_TYPE :
+STRUCT
+	errorCode : INT; (* 1- Com Error, 2 - Unknown request, 3 - Timeout, FA - ошибка CRC, FB - неверный запрос *)
+	subErrorCode : INT;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CCD_PARAM :
+STRUCT
+	address : BYTE; (* Адрес модуля CCD *)
+	channelMask : WORD; (* Маска каналов/Маска подключенных модулей, например, бит 2 = True - канал 2 в работе, бит 3 = False - канал 3 в резерве *)
+	channel : ARRAY [1..16] OF CCD_AI_PARAM_TYPE;
+	init : BOOL := TRUE; (* Запрос инициализации *)
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* Тип градуировки *)
+TYPE CCD_TYPE :
+(
+	RAW_VALUE := 								 0, (* Сырое значение *)
+	T_50M_1_4280_Cu_50 := 					 1,
+	T_50M_1_4260_Cu_50 := 					 3,
+	T_100M_1_4280_Cu_100 := 				 4,
+	T_100M_1_4260_Cu_100 := 				 5,
+	T_53M_1_4260_gr23 := 						 6,
+	T_50M_0_004280 := 							 7,
+	T_100M_0_004280 := 						 8,
+	T_100P_1_3910_Pt_100 := 					 16#0A,
+	T_50P_1_3910_Pt_50 := 					 16#0B,
+	T_100P_1_3850_Pt_100 := 					 16#0C,
+	T_50P_1_3850_Pt_50 := 					 16#0D,
+	T_100P_0_00391 := 							 16#0E,
+	T_50P_0_00391 := 							 16#0F,
+	T_100P_0_00385 := 							 16#10,
+	T_50P_0_00385 := 							 16#11,
+	T_GR21 :=									 16#13,
+	T_TPP_R := 									 16#80,
+	T_TPP_S := 									 16#81,
+	T_TPR_B := 									 16#82,
+	T_TJK_J := 									 16#83,
+	T_TMK_T := 									 16#84,
+	T_TXK_E := 									 16#85,
+	T_TXK_A := 									 16#86,
+	T_THH_N := 									 16#87,
+	T_TBP_A1 := 									 16#88,
+	T_TBP_A2 := 									 16#89,
+	T_TBP_A3 := 									 16#8A,
+	T_TXK_L := 									 16#8B,
+	T_TMK_M := 									 16#8C,
+	T_TMK_E := 									 16#8D,
+	V_0_1 := 										 16#C0,
+	V_0_5 := 										 16#C1,
+	V_0_10 := 										 16#C2,
+	V_minus5_5 := 								 16#C3,
+	V_minus10_10 := 							 16#C4,
+	V_1_5 := 										 16#C5,
+	A_0_5 := 										 16#E0,
+	A_minus5_5 := 								 16#E1,
+	A_0_20 := 										 16#E2,
+	A_4_20 := 										 16#E3,
+	MV_0_500 :=										 16#01C0,
+	A_20_4 := 										 16#1E3
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CCDComm_TYPE :
+STRUCT
+	countCCD : INT:=0; (* Количество подключенных CCD, максимум 8 *)
+	CCD_PARAM: ARRAY[1..6] OF CCD_PARAM; (* Параметры подключенных CCD *)
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE COM_DIAGN_TYPE :
+STRUCT
+	comStatus : COM_ERROR;
+	lcdm : ARRAY[1..6] OF LCDM_STATUS_TYPE;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* Ошибки связи по последовательному порту  *)
+TYPE COM_ERROR:
+(
+	NO_ERROR 	:= 0,
+	LIB_NOT_SUPPORT 	:= 1, (* This library is not supported by the firmware *)
+	COM_OUTSIDE	:= 2, (* COM port outside of the valid area *)
+	NOT_ASSIGNED := 3, (* This function block instance has not yet been assigned a COM port *)
+	ASSIGNED_DIFFERENT := 4, (* This FUNCTION block instance has already been assigned a different	COM port. *)
+	ALREADY_OPEN := 5, (* COM port is already opened. *)
+	ALREADY_CLOSED := 6, (* COM port is already closed. *)
+	NOT_OPENED := 7, (* COM port is NOT opened. *)
+	WRITE_STILL_ACTIVE := 8, (* A write operation is still active (COM1). *)
+	PARAMS_NOT_SUPPORT := 9, (* These transfer parameters are NOT supported BY the COM port. *)
+	SETTING_NOT_READ := 10, (* The current settings OF the bus	module could NOT be read. *)
+	LIB_NOT_SUPPORT_SETTING := 11, (* This library version does NOT yet	support the temporary setting OF 	communication parameters. *)
+	CANNOT_INIT := 12, (* Bus module could NOT be initialized. *)
+	ERROR_WRITE := 13, (* Error when writing data into the FIFO memory OF the bus module. *)
+	CONTENT_NOT_SENT := 14, (* The contents OF the FIFO memory 	was NOT sent (continuous sending). *)
+	INTERNAL_ERROR := 15, (* Internal error *)
+	NON_CONFIGURATION := 99 (* COM Port not used *)
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE LCDM_STATUS :(
+	LCDM_NOT_CONFIGURED := 16#0, 	(* LCDM не сконфигурирован/не существует *)
+	LCDM_OK := 16#1,				 	(* LCDM отвечает на запросы, ошибок нет *)
+	LCDM_TIMEOUT_ERROR := 16#2	 	(* LCDM не отвечает на запросы, ошибка связи *)
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE LCDM_STATUS_TYPE :
+STRUCT
+	status : LCDM_STATUS;
+	channelStatus : WORD; (* Бит 0 - 1 канал(true - ошибка), Бит 15 - 16 канал *)
+	channelMask : WORD; (* Бит 0 - 1 канал (true - используется, false - нет), Бит 15 - 16 канал *)
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE TYPE_CIRC :
+(
+	CIRC_3_WIRE := 0, (* Трехпроводная схема подключения *)
+	CIRC_4_WIRE := 1 (* Четырехпроводная схема подключения *)
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Global_Variables_CCD' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+VAR_GLOBAL
+	comStatus	AT %MW5000	:	ARRAY[2..6] OF COM_DIAGN_TYPE;	(* Выделенная память для диагностики *)
+	gaRWparams	AT %MW10000	:	ARRAY[1..100] OF WORD;			(* Выделенная память для чтения/записи параметров и диагностики *)
+END_VAR
+VAR_GLOBAL RETAIN
+	CCD_PARAMS	:	ARRAY [2..7] OF CCDComm_TYPE;				(* Выделенная память для хранения параметров *)
+	GlobalInit	:	BOOL := TRUE;								(* Переменная для инициализации параметров *)
+END_VAR
+(* @OBJECT_END := 'Global_Variables_CCD' *)
+(* @CONNECTIONS := Global_Variables_CCD
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)
+
+
+RESOURCE
+
+TASK SCALE_AI (PRIORITY := 20, INTERVAL := T#10ms);
+SCALE_ALL_AI();
+{Additional_info : 1,0,0,0,1,4294967295}
+END_TASK
+
+TASK ReadWriteCCDParams (PRIORITY := 25, INTERVAL := T#50ms);
+readWriteCCDParams();
+{Additional_info : 1,0,0,0,1,4294967295}
+END_TASK
+
+{event_task : 'start','Called when program starts','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,1,11950}
+{event_task : 'stop','Called when program stops','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,2,11950}
+{event_task : 'before_reset','Called before reset takes place','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,3,11950}
+{event_task : 'after_reset','Called after reset took place','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,4,11950}
+{event_task : 'shutdown','Called before shutdown is performed','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,5,11950}
+{event_task : 'excpt_watchdog','Software watchdog OF IEC-task expired','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,7,11950}
+{event_task : 'excpt_access_violation','Access violation','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,12,11950}
+{event_task : 'excpt_dividebyzero','Division BY zero','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,18,11950}
+{event_task : 'after_reading_inputs','Called after reading of inputs','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,28,11950}
+{event_task : 'before_writing_outputs','Called before writing of outputs','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,29,11950}
+{event_task : 'debug_loop','Debug loop at breakpoint','','FUNCTION systemevent: DWORD$R$NVAR_INPUT$R$N  dwEvent: DWORD;$R$N  dwFilter: DWORD;$R$N  dwOwner: DWORD;$R$NEND_VAR$R$N'}{event_task_info : 0,31,11950}
+{event_task : 'online_change','Is called after CodeInit() at Online-Change','CCDParamsInitStart','FUNCTION systemevent: DWORD VAR_INPUT dwEvent: DWORD; dwFilter: DWORD; dwOwner: DWORD; END_VAR '}{event_task_info : 0,33,11950}
+{event_task : 'before_download','Is called before the Download starts','CCDParamsInitStart','FUNCTION systemevent: DWORD VAR_INPUT dwEvent: DWORD; dwFilter: DWORD; dwOwner: DWORD; END_VAR '}{event_task_info : 0,34,11950}
+
+END_RESOURCE

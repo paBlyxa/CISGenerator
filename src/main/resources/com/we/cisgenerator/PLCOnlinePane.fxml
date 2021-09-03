@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+<AnchorPane prefHeight="500.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.we.cisgenerator.view.controller.PLCOnlineController">
+   <children>
+      <HBox prefHeight="30.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+         <children>
+            <Label fx:id="title" text="Online - PLC" HBox.hgrow="SOMETIMES">
+               <HBox.margin>
+                  <Insets bottom="5.0" left="5.0" right="5.0" top="5.0" />
+               </HBox.margin>
+            </Label>
+            <Region prefHeight="200.0" prefWidth="200.0" HBox.hgrow="SOMETIMES" />
+            <ProgressBar fx:id="progressBar" prefWidth="200.0" progress="0.0">
+               <HBox.margin>
+                  <Insets bottom="5.0" left="5.0" right="5.0" top="5.0" />
+               </HBox.margin>
+            </ProgressBar>
+         </children>
+      </HBox>
+      <TableView id="param-table" fx:id="paramTable" layoutY="31.0" prefHeight="200.0" prefWidth="200.0" stylesheets="@style.css" AnchorPane.bottomAnchor="40.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="30.0">
+        <columns>
+          <TableColumn fx:id="nameColumn" minWidth="150.0" prefWidth="238.0" styleClass="column-left" text="Параметр" />
+          <TableColumn fx:id="valOfflineColumn" prefWidth="161.0" styleClass="column-center" text="Оффлайн" />
+            <TableColumn fx:id="valOnlineColumn" prefWidth="150.0" styleClass="column-center" text="Онлайн" />
+        </columns>
+         <columnResizePolicy>
+            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+         </columnResizePolicy>
+      </TableView>
+      <HBox prefHeight="40.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+         <children>
+            <Region prefHeight="10.0" prefWidth="200.0" HBox.hgrow="ALWAYS" />
+            <Button fx:id="buttonRefresh" mnemonicParsing="false" onAction="#handleRefresh" text="Обновить">
+               <font>
+                  <Font name="System Bold" size="14.0" />
+               </font>
+               <HBox.margin>
+                  <Insets bottom="5.0" left="5.0" right="10.0" top="5.0" />
+               </HBox.margin>
+            </Button>
+            <Button fx:id="buttonLoadAll" mnemonicParsing="false" onAction="#handleUpdateAll" text="Загрузить все">
+               <HBox.margin>
+                  <Insets bottom="5.0" left="5.0" right="5.0" top="5.0" />
+               </HBox.margin>
+               <font>
+                  <Font name="System Bold" size="14.0" />
+               </font>
+            </Button>
+         </children>
+      </HBox>
+   </children>
+</AnchorPane>

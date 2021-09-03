@@ -1,0 +1,284 @@
+LIBRARY
+Iecsfc.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+SFCActionControl: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+mod_com.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 11
+ADD_PI_INFORMATION: 0
+CRC16: 0
+FBUS_ERROR_INFORMATION: 0
+GET_DIGITAL_INPUT_OFFSET: 0
+GET_DIGITAL_OUTPUT_OFFSET: 0
+KBUS_ERROR_INFORMATION: 0
+MOD_COM_VERSION: 0
+PI_INFORMATION: 0
+SET_DIGITAL_INPUT_OFFSET: 0
+SET_DIGITAL_OUTPUT_OFFSET: 0
+SLAVE_ADDRESS: 0
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+SerComm.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+SERCOMM: 0
+SERCOMM_VERSION: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+Serial_Interface_01.lib 22.4.13 13:50:14
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 7
+SERIAL_COM_OBJECT: 2048
+SERIAL_INTERFACE: 2048
+SERIAL_INTERFACE.CLOSE_PORT: 2048
+SERIAL_INTERFACE.OPEN_PORT: 2048
+SERIAL_INTERFACE.RECEIVE_DATA: 2048
+SERIAL_INTERFACE.SEND_DATA: 2048
+Version_SerialInterface: 2048
+NumOfGVLs: 1
+Globale_InterfaceConstant: 0
+END_LIBRARY
+
+LIBRARY
+Standard.lib 20.5.14 09:13:26
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 26
+ASCIIBYTE_TO_STRING: 2048
+CONCAT: 0
+CTD: 0
+CTU: 0
+CTUD: 0
+DELETE: 0
+F_TRIG: 0
+FIND: 0
+INSERT: 0
+LEFT: 0
+LEN: 0
+MID: 0
+R_TRIG: 0
+REAL_STATE: 2048
+REPLACE: 0
+RIGHT: 0
+RS: 0
+RTC: 0
+SEMA: 0
+SR: 0
+STANDARD_VERSION: 2048
+STRING_COMPARE: 2048
+STRING_TO_ASCIIBYTE: 2048
+TOF: 0
+TON: 0
+TP: 0
+NumOfGVLs: 1
+'Global Variables 0': 0
+END_LIBRARY
+
+LIBRARY
+SYSLIBCALLBACK.LIB 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+SysCallbackRegister: 0
+SysCallbackUnregister: 0
+NumOfGVLs: 2
+Globale_Variablen: 0
+Version: 0
+END_LIBRARY
+
+LIBRARY
+SysLibMem.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 7
+SysMemAlloc: 0
+SysMemCmp: 0
+SysMemCpy: 0
+SysMemFree: 0
+SysMemMove: 0
+SysMemSet: 0
+SysMemSwap: 0
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+SysLibRtc.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 4
+SysRtcCheckBattery: 0
+SysRtcGetHourMode: 0
+SysRtcGetTime: 0
+SysRtcSetTime: 0
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+SysLibSem.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 5
+SysSemCreate: 0
+SysSemDelete: 0
+SysSemEnter: 0
+SysSemLeave: 0
+SysSemTry: 0
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+SysLibSockets.lib 22.5.14 17:16:32
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 26
+SysSockAccept: 0
+SysSockBind: 0
+SysSockClose: 0
+SysSockConnect: 0
+SysSockCreate: 0
+SysSockGetHostByName: 0
+SysSockGetHostName: 0
+SysSockGetLastError: 2048
+SysSockGetLastErrorSync: 2048
+SysSockGetOption: 0
+SysSockHtonl: 0
+SysSockHtons: 0
+SysSockInetAddr: 0
+SysSockInetNtoa: 0
+SysSockIoctl: 0
+SysSockListen: 0
+SysSockNtohl: 0
+SysSockNtohs: 0
+SysSockRecv: 0
+SysSockRecvFrom: 0
+SysSockSelect: 0
+SysSockSend: 0
+SysSockSendTo: 0
+SysSockSetIPAddress: 0
+SysSockSetOption: 0
+SysSockShutdown: 0
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+SysLibTime.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+CurTime: 0
+CurTimeEx: 0
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+SysTaskInfo.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+taskinfo: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+WagoConfigToolLIB.lib 30.1.13 14:05:12
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 3
+configToolFB: 2048
+IP_TO_STRING: 2048
+STRING_TO_IP: 2048
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+WagoLibCpuUsage.lib 8.5.13 18:24:14
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+CPU_Usage: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+WagoLibEthernet_01.lib 1.4.15 15:24:28
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 14
+IP_FindBlock: 2048
+IP_FindByte: 2048
+IP_MEMCPY: 2048
+IP_Version: 2048
+TCP_Client: 2048
+TCP_Client2: 2048
+TCP_Client3: 2048
+TCP_Server: 2048
+TCP_Server3: 2048
+UDP_Client: 2048
+UDP_Client_2: 2048
+UDP_Server: 2048
+UDP_Server2: 2048
+UDP_SndRcv: 2048
+NumOfGVLs: 1
+Globale_Variablen: 2048
+END_LIBRARY
+
+LIBRARY
+WagoLibModbus_IP_01.lib 12.2.16 12:20:24
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 5
+Client_OpenClose: 2048
+ETHERNET_MODBUSMASTER_TCP: 0
+ETHERNET_MODBUSMASTER_UDP: 2048
+Modbus_IP_Version: 2048
+ModbusRequest: 2048
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY
+
+LIBRARY
+WAGOLIBNTP.lib 27.3.14 19:10:54
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 3
+FRACTION_TO_MS: 2048
+NTP_Client: 2048
+NTP_TO_TIME: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+WagoLibReset.lib 15.8.13 10:27:54
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 1
+FirmwareReset: 2048
+NumOfGVLs: 1
+Global_Variables: 2048
+END_LIBRARY
+
+LIBRARY
+Wago_MBCFG_COMMON_01.lib 1.4.15 15:24:28
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 0
+NumOfGVLs: 0
+END_LIBRARY
+
+LIBRARY
+Wago_MBCFG_ETHERNET_01.lib 1.4.15 15:24:28
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 5
+MBCFG_MASTER_TCP: 2048
+MBCFG_MASTER_UDP: 2048
+MBCFG_MASTER_UDP.PREPARE_WRITE_DATA: 2048
+MBCFG_MASTER_UDP.START_JOB: 2048
+MBCFG_MASTER_UDP.TAKE_DATA_OVER: 2048
+NumOfGVLs: 0
+END_LIBRARY

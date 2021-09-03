@@ -1,0 +1,143 @@
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'IEC 60870 Generated Globale_Variablen' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* Generated on: 23.11.2020 16:09:03 *)
+(* IEC60870 Configurator version: 2.9.0 - 2019-04-02 *)
+VAR_GLOBAL CONSTANT
+	IEC870_AFZ_DEFAULT					: TIME := t#2s;
+	IEC870_AFZ_KURZ						: TIME := t#500ms;
+	IEC870_AFZ_LANG						: TIME := t#5s;
+	IEC870_MAX_CLIENTS					: BYTE := 2;
+	(* new options since version 001.001.000 *)
+	gxIEC870_ControllerHardware872		: BOOL := FALSE;
+	geIEC870_CurrentTarget              : ENUM870_TARGET := ENUM870_TARGET_PFC200;
+	gxIEC870_UsedInfoObjFB_V2			: BOOL := FALSE;
+	gtIEC870_NTP_RequestResponseTime	: TIME := t#50ms;
+	gtIEC870_NTP_UpdateIntervall	    : TIME := t#1m;
+	gtIEC870_NTP_WatchdogTime	        : TIME := t#10m;
+	(* new options since version 001.000.017 *)
+	gxIEC870_ZW_SendeSequenzNrSpontan   : BOOL := TRUE;
+	(* new feature since version 001.001.009 *)
+	gsiIEC870_CLOCK_TimeZone	        : SINT := 0;
+	gnIEC870_CLOCK_DST_Mode	            : INT := 0;
+	(* new feature since version 001.001.017 *)
+	IEC870_MAX101_SlaveConnections	    : INT := 1;
+	IEC870_MAX104_SlaveConnections	    : INT := 1;
+	(* new feature since version 001.001.018 *)
+	gxIEC870_ZW_SendeSpontan	        : BOOL := FALSE;
+	(* new feature since version 001.001.026 *)
+	(* gdiIEC870_TimeOutC_Objs	            : DINT := 1000; *)
+	(* new feature since version 001.001.027 *)
+	gdiIEC870_BUFFER_SIZE	            : DINT := 8000;
+	gdiIEC870_BUFFER_SIZE_BYTE	        : DINT := 16000;
+	gxIEC870_SendeInitEnde_70           : BOOL := TRUE;
+	(* new feature since Base Lib Version 001.001.012 *)
+	gxIEC870_ENABLE_GA_FOR_CP_OBJ	    : BOOL := TRUE;
+	gxIEC870_SEND_CP_OBJ_AS_RAW_OBJ	    : BOOL := FALSE;
+	(* new feature since new configurator Version 002.000.000 *)
+	gxIEC870_Obj103_SetSystemTime	        : BOOL := FALSE;
+	gxIEC870_CP56_SU	                : BOOL := TRUE;
+	gxIEC870_CP56_Weekday               : BOOL := TRUE;
+	IEC870_MAX_INFOBJ                   : WORD := 511; (* Maximale Anzahl von Informations Objekten *)
+	(* new feature since new library version 002.000.027 *)
+	gxIEC870_Enable1vonN                : BOOL := FALSE;
+	gtIEC870_MaxReceiveDelay            : TIME := t#0s;
+	C870_MAX_FUS103						: INT := 1;
+END_VAR
+VAR_GLOBAL
+	gxIEC870_Enable                     : BOOL := TRUE;
+	gdwIEC870EnableStrAdressierung		: DWORD := C870_STR_ADRESSIERUNG_KEINE;
+	statusLinkLayer		: ARRAY[1..IEC870_MAX_CLIENTS] OF BOOL;
+END_VAR
+
+(* Beginn of CFG export please do not delete or change
+<?xml version="1.0" encoding="utf-16"?>
+<IEC60870ProjectDescription Version="2.4.9" Guid="BCAB5D0D-5CE5-406E-8736-146506C81871" Generated="13.10.2017 12:08:38">
+  <CConfiguration Name="IEC60870 Konfiguration">
+    <Text>IEC60870 Konfiguration</Text>
+    <Parameter Name="AfzDefault" Type="Time" Val="t#2s" />
+    <Parameter Name="AfzKurz" Type="Time" Val="t#500ms" />
+    <Parameter Name="AfzLang" Type="Time" Val="t#5s" />
+    <Parameter Name="ClockSyncMode" Type="ENUM_TimeSync" Val="1" />
+    <Parameter Name="ClockDlsMode" Type="INT" Val="0" />
+    <Parameter Name="ClockTimeZone" Type="BYTE" Val="0" />
+    <Parameter Name="NtpSvrAdr" Type="IP" Val="192.53.103.108" />
+    <Parameter Name="NtpUpdateTime" Type="Time" Val="t#1m" />
+    <Parameter Name="NtpRequResp" Type="Time" Val="t#50ms" />
+    <Parameter Name="ClockObject103" Type="BOOL" Val="False" />
+    <Parameter Name="ClockInvalidObj103" Type="ENUM_ClockInvalidObj103" Val="0" />
+    <Parameter Name="ClockInvalidObj103Timeout" Type="TIME" Val="t#10m" />
+    <Parameter Name="750-640InAdr" Type="VARIABLE" Val="%IB0" />
+    <Parameter Name="750-640OutAdr" Type="VARIABLE" Val="%QB0" />
+    <Parameter Name="Task1Prio" Type="BYTE" Val="7" />
+    <Parameter Name="Task1Time" Type="TIME" Val="t#20ms" />
+    <Parameter Name="Task2Prio" Type="BYTE" Val="8" />
+    <Parameter Name="Task2Time" Type="TIME" Val="t#20ms" />
+    <Parameter Name="Task3Prio" Type="BYTE" Val="9" />
+    <Parameter Name="Task3Time" Type="TIME" Val="t#20ms" />
+    <Parameter Name="Task4Prio" Type="BYTE" Val="10" />
+    <Parameter Name="Task4Time" Type="TIME" Val="t#20ms" />
+    <Parameter Name="VarGenMode" Type="BOOL" Val="True" />
+    <Parameter Name="Autostart" Type="" Val="True" />
+    <Parameter Name="SendInitEnd" Type="BOOL" Val="TRUE" />
+    <Parameter Name="UseRetainPara" Type="BOOL" Val="FALSE" />
+    <Parameter Name="SignalPreprocessArchive_COT" Type="BYTE" Val="48" />
+    <Parameter Name="SizeOfMsgBuffer" Type="UINT" Val="16" />
+    <Parameter Name="StructTrans" Type="ENUM_StructTrans" Val="0" />
+    <Parameter Name="Func1N" Type="" Val="False" />
+    <Parameter Name="MaxReceiveDelay" Type="TIME" Val="t#0s" />
+    <Parameter Name="TimeObjectsByGA" Type="ENUM_TimeObjectsByGA" Val="0" />
+    <Parameter Name="TimeStampCP56_SU" Type="BOOL" Val="True" />
+    <Parameter Name="TimeStampCP56_Weekday" Type="BOOL" Val="True" />
+    <CServer104 Name="Server104">
+      <Text>Server104 A(000.001 = 1)</Text>
+      <Parameter Name="TaskInfoObj" Type="ENUM_TASKS" Val="1" />
+      <Parameter Name="TaskComm" Type="ENUM_TASKS" Val="1" />
+	  <Parameter Name="ASDUAdr2" Type="BYTE" Val="0" />
+      <Parameter Name="ASDUAdr1" Type="BYTE" Val="1" />
+      <Parameter Name="HrkAdr" Type="BYTE" Val="1" />
+      <Channel Name="LinkOk" Type="ARRAY[1..IEC870_MAX_CLIENTS] OF BOOL" Autoapply="True" Assignment="statusLinkLayer" />
+      <Channel Name="LinkOkMultilink" Type="ARRAY[1..IEC870_MAX_SVLINKS] OF BOOL" Autoapply="True" Assignment="" />
+      <Parameter Name="MaxMsgLen" Type="BYTE" Val="253" />
+      <Parameter Name="PacketFrames" Type="ENUM_FrameSize104" Val="0" />
+      <Parameter Name="ParameterK" Type="WORD" Val="12" />
+      <Parameter Name="ParameterW" Type="WORD" Val="8" />
+      <Parameter Name="ParameterT1" Type="TIME" Val="T#15s" />
+      <Parameter Name="ParameterT2" Type="TIME" Val="T#10s" />
+      <Parameter Name="ParameterT3" Type="TIME" Val="T#20s" />
+      <Parameter Name="TestframesServer104" Type="BOOL" Val="True" />
+      <Parameter Name="Port104" Type="WORD" Val="2404" />
+      <Parameter Name="BindIP" Type="ENUM_BindIP" Val="0" />
+      <Parameter Name="BindIP_Addr" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="TransmitDelay" Type="Time" Val="t#0ms" />
+      <Parameter Name="CounterMode" Type="ENUM_CounterMode" Val="2" />
+      <Parameter Name="SelectBeforeExecute" Type="ENUM_SelectBeforeExecute" Val="0" />
+      <Parameter Name="ExeuteTimeout" Type="TIME" Val="t#5s" />
+      <Channel Name="CloseTcpConS104" Type="BOOL" Autoapply="True" Assignment="" />
+      <Parameter Name="DialUp" Type="ENUM_DialUp104" Val="0" />
+      <Parameter Name="IPControlCenter" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MaxClients" Type="ENUM_CLIENTS" Val="2" />
+      <Parameter Name="ParameterT0" Type="TIME" Val="T#30s" />
+      <Parameter Name="IPFilter" Type="BOOL" Val="0" />
+      <Parameter Name="Client1IP1" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client1IP2" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client1IP3" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client2IP1" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client2IP2" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client2IP3" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client3IP1" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client3IP2" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client3IP3" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client4IP1" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client4IP2" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="Client4IP3" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MultiClient1IP1" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MultiClient1IP2" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MultiClient1IP3" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MultiClient2IP1" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MultiClient2IP2" Type="IP" Val="0.0.0.0" />
+      <Parameter Name="MultiClient2IP3" Type="IP" Val="0.0.0.0" />

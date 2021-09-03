@@ -1,0 +1,263 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE AI_TYPE :
+STRUCT
+	value : REAL;
+	stat : INT;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Global_Variables' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+VAR_GLOBAL
+	realValue		AT %MD0		:	ARRAY[1..C_AI_SIZE] OF AI_TYPE;	(* ¬ыделенна€ пам€ть %MW0 - %MW2996 дл€ 749 аналоговых сигналов, адреса: 12288, 12292 Е 15284; —игналы начина€ с 401 по 500 используютс€ в IEC104 *)
+	boolValueIn		AT %QW1000	:	ARRAY[1..101] OF WORD;			(* ¬ыделенна€ пам€ть %QW1000 - %QW1100 дл€ 1600 дискретных сигналов, адреса: 6144 Е 7744 (0x1800 Е 0x1E40) *)
+	valueCouplerIn	AT %QW1200	:	ARRAY[1..101] OF WORD;			(* ¬ыделенна€ пам€ть %QW1200 - %QW1300 дл€ 1600 дискретных сигналов, адреса: 9344 Е 10944 (0x2480 Е 0x2AC0) *)
+	boolValueOut	AT %IW1000	:	ARRAY[1..100] OF WORD;			(* ¬ыделенна€ пам€ть %IW1000 - %IW1099 дл€ 1584 дискретных сигналов, адреса: 0 Е 1584 *)
+	valueCouplerOut AT %IW1100	:	ARRAY[1..101] OF WORD;			(* ¬ыделенна€ пам€ть %IW1100 - %IW1200 дл€ 1600 дискретных сигналов, адреса: 1600 Е 3200 *)
+	giStatusCom		AT %MW3201	:	INT;							(* ¬ыделенна€ пам€ть %MW3201 дл€ контрол€ наличи€ св€зи с ¬у, адрес 15489 (63504) *)
+	giCountPLC1		AT %MW3202	:	INT;							(* ¬ыделенна€ пам€ть %MW3202 дл€ контрол€ наличи€ св€зи с PLC1, адрес 15490, икремент 1 раз в сек *)
+	giCountPLC2		AT %MW3203	:	INT;							(* ¬ыделенна€ пам€ть %MW3203 дл€ контрол€ наличи€ св€зи с PLC2, адрес 15491, икремент 1 раз в сек *)
+	giMAddress		AT %MW3500	:	INT;							(* јдрес переменной дл€ блока метрологии, адрес: 15788 *)
+	giMCtrl			AT %MW3501	:	INT;							(* —лово управлени€ дл€ блока метрологии, адрес: 15789 *)
+	grMValue		AT %MW3502	:	ARRAY[0..5] OF REAL;			(* »змеренные значени€ дл€ блока метрологии, адреса: 15790 ... 15801 *)
+END_VAR
+VAR_GLOBAL CONSTANT
+	C_AI_SIZE			:	INT := 800;								(* количество сигналов *)
+	C_MAIN_REZERV_PLC	:	BOOL := TRUE;							(* основной контроллер (1) или резервный (0) *)
+END_VAR
+(* @OBJECT_END := 'Global_Variables' *)
+(* @CONNECTIONS := Global_Variables
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)
+
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM Metrology
+VAR
+	sxCheckAddr : BOOL := FALSE;
+	stTimerSim : TON;
+	siIndex : INT;
+	siInternalIndex : INT;
+END_VAR
+VAR CONSTANT
+	ciIecOffsetAddr : INT := 400;
+	ciModbusOffsetAddr : INT := 12288;
+	ctRate : TIME := T#250ms;
+	ciCountValues : INT := 5;
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* Текущее значение по адресу *)
+IF (giMAddress = 0) THEN
+	grMValue[0] := 0;
+	sxCheckAddr := FALSE;
+ELSIF (giMAddress <= 100) THEN
+	grMValue[0] := realValue[ciIecOffsetAddr + giMaddress].value;
+	sxCheckAddr := TRUE;
+ELSIF ((giMAddress >= 12288) AND (giMAddress <= 15284)) THEN
+	grMValue[0] := realValue[(giMaddress - ciModbusOffsetAddr) / 4 + 1].value;
+	sxCheckAddr := TRUE;
+ELSE
+	grMValue[0] := 0;
+	sxCheckAddr := FALSE;
+END_IF;
+
+(* Формируем пять измерения в точке *)
+IF (giMCtrl.0 AND (NOT giMCtrl.1) AND sxCheckAddr) THEN
+	giMCtrl.1 := TRUE;
+	siIndex := 1;
+	grMValue[1] := 0;
+	grMValue[2] := 0;
+	grMValue[3] := 0;
+	grMValue[4] := 0;
+	grMValue[5] := 0;
+END_IF;
+
+IF (giMCtrl.1) THEN
+	stTimerSim(IN:= TRUE, PT:= ctRate);
+	IF (stTimerSim.Q) THEN
+		IF (siIndex > ciCountValues) THEN
+			(* Измерения сделаны, сброс работы *)
+			(* ‘ормируем небольшую задержку, дл€ стабильного опроса с ¬”  *)
+			IF (siIndex > (ciCountValues + 12)) THEN
+				giMCtrl.1 := FALSE;
+				giMCtrl.0 := FALSE;
+			ELSE
+				siIndex := siIndex + 1;
+			END_IF;
+		ELSE
+			grMValue[siIndex] := grMValue[0];
+			siIndex := siIndex + 1;
+		END_IF;
+		stTimerSim(IN:= FALSE, PT:= ctRate);
+	END_IF;
+END_IF;
+END_PROGRAM
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Couplers' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK ModbusMasterTCP
+VAR_INPUT
+	isIpAddress			:	STRING(14);		(* address of this slave *)
+	iuPort				:	UINT;			(* IP - Port *)
+	ibUnitID			:	BYTE;			(* MODBUS Unit-Id *)
+	itResponseTimeout	:	TIME;			(* Response timeout*)
+	itConnectTimeout	:	TIME;			(* Connection timeout*)
+	itRequestDelay		:	TIME;			(* Request delay *)
+	iiReadAddress		:	UINT;			(* Read address *)
+	iiReadQuantity		:	UINT;			(* Read quantity *)
+	iiReadOffset		:	UINT;			(* Offset in memory in bytes *)
+	iiWriteAddress		:	UINT;			(* Write address *)
+	iiWriteQuantity		:	UINT;			(* Write quantity *)
+	iiWriteOffset		:	UINT;			(* Offset in memory in bytes *)
+END_VAR
+
+VAR_OUTPUT
+    (*--- system variables (read only) ----------------------------------------*)
+	qxConnected			:	BOOL;
+	qwError				:	WORD;
+    (*-------------------------------------------------------------------------*)
+END_VAR
+VAR
+    (*=== MODBUS MASTER =====================================*)
+    zz_MB_MASTER_ETH :       ETHERNET_MODBUSMASTER_TCP;
+    (*=======================================================*)
+	requestDelay	:	TON;
+	lxSend			:	BOOL;
+	lbFunction		:	BYTE;
+	swValueOut		:	DWORD;
+END_VAR
+(* @END_DECLARATION := '0' *)
+requestDelay(IN:= (qxConnected AND (NOT lxSend)), PT:= itRequestDelay, Q=> lxSend, ET=> );
+
+IF (lxSend) THEN
+	CASE lbFunction OF
+		3 : (* READ REGISTERS *)
+			IF (iiWriteQuantity > 0) THEN
+				lbFunction := 16;
+			END_IF;
+
+		16 : (* WRITE REGISTERS *)
+			IF (iiReadQuantity > 0) THEN
+				lbFunction := 3;
+			END_IF;
+		ELSE
+			IF (iiReadQuantity > 0) THEN
+				lbFunction := 3;
+			ELSIF (iiWriteQuantity > 0) THEN
+				lbFunction := 16;
+			END_IF;
+	END_CASE;
+END_IF;
+
+IF (NOT PLC_PRG.stTimer.Q) THEN
+	swValueOut := ADR(valueCouplerOut) + iiWriteOffset;
+ELSE
+	(* If not connection, send 0 values *)
+	swValueOut := ADR(valueCouplerOut) + 200;
+END_IF;
+
+(*#### Call ETHERNET_MODBUS_MASTER_TCP ###################################*)
+zz_MB_MASTER_ETH(
+	xCONNECT:= TRUE,
+	strIP_ADDRESS:= isIpAddress,
+	wPORT:= iuPort,
+	bUNIT_ID:= ibUnitID,
+	bFUNCTION_CODE:= lbFunction,
+	wREAD_ADDRESS:= iiReadAddress,
+	wREAD_QUANTITY:= iiReadQuantity,
+	ptREAD_DATA:= ADR(valueCouplerIn) + iiReadOffset,
+	wWRITE_ADDRESS:= iiWriteAddress,
+	wWRITE_QUANTITY:= iiWriteQuantity,
+	ptSEND_DATA:= swValueOut,
+	tTIME_OUT:= itResponseTimeout,
+	tCON_WATCHDOG:= itConnectTimeout,
+	xSEND:= lxSend,
+	xIS_CONNECTED=> qxConnected,
+	wERROR=> qwError,
+	bRESPONSE_UNIT_ID=> );
+(*##############################################################*)
+END_FUNCTION_BLOCK
+
+
+((* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM PLC_PRG
+VAR
+	LowerThresholdReached: BOOL;
+	UpperThresholdReached: BOOL;
+	CpuUsageTotal: BYTE;
+	CpuUsageRealtime: BYTE;
+	CpuUsageOther: BYTE;
+	CPU_Usage1 : CPU_Usage;
+	stTimer : TON;
+	stIncTimer : TON;
+END_VAR
+VAR CONSTANT
+	ctTimeoutCom : TIME := T#5s;
+	ctIncrementTime : TIME := T#1s;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* для контроля наличия связи с ву *)
+stTimer(IN:= (giStatusCom = 0) , PT:= ctTimeoutCom);
+giStatusCom := 0;
+
+(* для контроля наличия связи с PLC на ву *)
+stIncTimer(IN := TRUE, PT := ctIncrementTime);
+IF (stIncTimer.Q) THEN
+	IF (C_MAIN_REZERV_PLC) THEN
+		giCountPLC1 := giCountPLC1 + 1;
+	ELSE
+		giCountPLC2 := giCountPLC2 + 1;
+	END_IF;
+	stIncTimer(IN := FALSE, PT := ctIncrementTime);
+END_IF;
+
+ReadAIDI();
+
+CPU_Usage1(
+	byLowerThreshold:= 80,
+	byUpperThreshold:= 90,
+	xLowerThresholdReached=> LowerThresholdReached,
+	xUpperThresholdReached=> UpperThresholdReached,
+	byCpuUsageTotal=> CpuUsageTotal,
+	byCpuUsageRealtime=> CpuUsageRealtime,
+	byCpuUsageOther=> CpuUsageOther);
+END_PROGRAM
+
+
+RESOURCE
+
+TASK NewTask (PRIORITY := 30);
+PLC_PRG();
+Metrology();
+{Additional_info : 2,0,0,0,1,4294967295}
+END_TASK
+
+
+TASK MODBUS_MASTER_TASK (PRIORITY := 29, INTERVAL := T#25ms);
+ModbusMaster();
+{Additional_info : 1,0,0,0,1,4294967295}
+END_TASK
+
+END_RESOURCE

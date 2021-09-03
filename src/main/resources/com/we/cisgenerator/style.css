@@ -1,0 +1,6 @@
+#plc-table .table-column {
+  -fx-alignment: center;
+}
+#param-table .column-center {
+  -fx-alignment: center;
+}

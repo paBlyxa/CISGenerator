@@ -1,0 +1,699 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+PROGRAM IEC60870_MAIN_PRG
+VAR_INPUT
+	tonReboot			: TON := (PT := t#3s);
+END_VAR
+VAR
+	tonSystemStart		: TON := (PT := t#1s);
+END_VAR
+(* @END_DECLARATION := '0' *)
+IEC870_SyncClockOnRTC(eSyncMode := IEC870_CSM_SNTP);
+
+(*=======================================================================================================================*)
+(* Special treatment, if an reset via IEC 60870 is requested *)
+tonReboot(IN := (gbyIEC870_ValueQRP = 1));
+IF (tonReboot.ET < t#1s) THEN (* Normal operation *)
+	;
+ELSE
+	IEC60870_ServerPRG_1_104.ExitAction();
+	IF (tonReboot.Q) THEN
+		FirmwareReset(TRUE);
+	END_IF
+END_IF
+
+(*=======================================================================================================================*)
+IF (gxIEC870_Enable) THEN
+	IF (tonSystemStart.Q = FALSE) THEN
+		(* One second after restart of the IEC 60870 application the retain variable for the cause of the restart will be reset *)
+		tonSystemStart(IN := TRUE);
+		gbyIEC870_RetainQRP := SEL(tonSystemStart.Q, gbyIEC870_RetainQRP, 0);
+	END_IF
+END_IF
+END_PROGRAM
+
+
+
+
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* Generated on: 13.10.2017 12:08:38 *)
+(* IEC60870 Configurator version: 2.4.9 - 2017-04-04 *)
+FUNCTION_BLOCK IEC870_ComHandshake
+VAR_INPUT
+	iComPort		: INT;
+	pKBUS_DW		: POINTER TO ARRAY[0..1] OF WORD;
+	wKBUS_ADR		: WORD;
+END_VAR
+VAR_OUTPUT
+	xRTS			: BOOL;
+	xOpen			: BOOL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+;
+END_FUNCTION_BLOCK
+ACTION	ActionReadDW:
+;
+END_ACTION
+
+ACTION	ActionWriteDW:
+;
+END_ACTION
+
+ACTION	Close:
+;
+END_ACTION
+
+ACTION	CTS_SetHigh:
+;
+END_ACTION
+
+ACTION	CTS_SetLow:
+;
+END_ACTION
+
+ACTION	Open:
+;
+END_ACTION
+
+ACTION	ReadRTS:
+;
+END_ACTION
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* Generated on: 13.10.2017 12:08:38 *)
+(* IEC60870 Configurator version: 2.4.9 - 2017-04-04 *)
+FUNCTION_BLOCK IEC870_ConfigTool
+VAR_INPUT
+	bEnable                     : BOOL;
+	stCallString	            : STRING(250);
+END_VAR
+VAR_OUTPUT
+	bDone			            : BOOL;
+	bBusy			            : BOOL;
+	stResultString	            : STRING;
+	iFbResult		            : INT;
+	iConfigToolResult           : INT;
+	stConfigToolErrorString	    : STRING(150);
+END_VAR
+VAR
+	fbCT				    : configToolFB;
+END_VAR
+(* @END_DECLARATION := '0' *)
+fbCT(bEnable                := bEnable,
+     stCallString            := stCallString,
+     bDone                   => bDone,
+     bBusy                   => bBusy,
+     stResultString          => stResultString,
+     iFbResult               => iFbResult,
+     iConfigToolResult       => iConfigToolResult,
+     stConfigToolErrorString => stConfigToolErrorString);
+END_FUNCTION_BLOCK
+
+
+      
+
+LIBRARY
+WagoLib60870_06.lib 28.2.20 17:12:24
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 554
+_SysBufferAppend: 2048
+_SysBufferRemove: 2048
+_SysComSendTxt: 2048
+_SysModemTxtApp: 2048
+fb870_SubASDU: 2048
+fbIEC870_104Tls_ClientConnection: 2048
+fbIEC870_104Tls_ClientConnection.Interpreter: 2048
+fbIEC870_104Tls_Link: 2048
+fbIEC870_104Tls_Link.ActivClose: 2048
+fbIEC870_104Tls_Link.Init: 2048
+fbIEC870_104Tls_Link.RxPart: 2048
+fbIEC870_104Tls_Link.TriggerObj70: 2048
+fbIEC870_104Tls_Link.TriggerStartDT: 2048
+fbIEC870_104Tls_Link.TxPart: 2048
+fbIEC870_104Tls_Server: 2048
+fbIEC870_104Tls_Server.ExitAction: 2048
+fbIEC870_41S_IT_TC: 2048
+fbIEC870_81S_CH_NA: 2048
+fbIEC870_82S_RP_NA: 2048
+fbIEC870_83S_AR_NA: 2048
+fbIEC870_84S_KR_NA: 2048
+fbIEC870_85S_KS_NA: 2048
+fbIEC870_86S_KC_NA: 2048
+fbIEC870_87S_ER_NA: 2048
+fbIEC870_90S_US_NA: 2048
+fbIEC870_91S_UQ_NA: 2048
+fbIEC870_92S_UR_NA: 2048
+fbIEC870_93S_UK_NA: 2048
+fbIEC870_94S_UA_NA: 2048
+fbIEC870_95S_UC_NA: 2048
+fbIEC870_FileManager: 2048
+fbIEC870_FileManager._Init: 2048
+fbIEC870_FileManager.Reci: 2048
+fbIEC870_FileManager.Send: 2048
+fbIEC870_InitSerCom: 2048
+fbIEC870_InitSerCom.Init: 2048
+fbIEC870_InitSerCom.RegisterCom: 2048
+fbIEC870_InitSerCom.RegisterRd: 2048
+fbIEC870_InitSerCom.RegisterWr: 2048
+fbIEC870_SecurManager: 2048
+fbIEC870_SecurManager._Init: 2048
+fbIEC870_SecurManager.Reci: 2048
+fbIEC870_SecurManager.Send: 2048
+fbMultiAsduLink101: 2048
+fbMultiAsduLink101.InitAction: 2048
+fIEC870_104AppentFixLenMsg: 2048
+fIEC870_104AppentFlexLenMsg: 2048
+fIEC870_BroadcastC_Rejected: 2048
+fIEC870_ByteToDez: 2048
+fIEC870_CheckRxCotIsOk: 2048
+fIEC870_CmpTypAdr: 2048
+fIEC870_ComWatchInit: 2048
+fIEC870_ConfSlaveResponse: 2048
+fIEC870_CP56_ADDOFFSET: 2048
+fIEC870_FileList: 2048
+fIEC870_FileNameValid: 2048
+fIEC870_FileReadyFile: 2048
+fIEC870_FileReadySeg: 2048
+fIEC870_FileReciveEnd: 2048
+fIEC870_FileReciveSeg: 2048
+fIEC870_Gen103_C20_Msg: 2048
+fIEC870_Gen103_Cgen_Msg: 2048
+fIEC870_Gen103_CPrv_Msg: 2048
+fIEC870_Gen103_CS_Msg: 2048
+fIEC870_Gen103_IC_Msg: 2048
+fIEC870_GenInfObjTypAdrC: 2048
+fIEC870_GenInfObjTypAdrM: 2048
+fIEC870_Get103_MPrv_Msg: 2048
+fIEC870_GetInfObjAdr: 2048
+fIEC870_GetInfObjTypIC: 2048
+fIEC870_GetTypAdr: 2048
+fIEC870_InfObjDataInL1: 2048
+fIEC870_InitDstList: 2048
+fIEC870_LB_to_LBS: 2048
+fIEC870_Msg101ToLog: 2048
+fIEC870_Msg104ToLog: 2048
+fIEC870_MsgBufferCopyObjData: 2048
+fIEC870_MsgBufferInitFirstLevel: 2048
+fIEC870_MsgBufferMsgConvert: 2048
+fIEC870_MsgBufferMustPut: 2048
+fIEC870_MsgFindMsgStart: 2048
+fIEC870_MsgLoggInsertAsDez: 2048
+fIEC870_MsgLoggScroll: 2048
+fIEC870_MsgTo08BitInt: 2048
+fIEC870_MsgTo101Line1: 2048
+fIEC870_MsgTo16BitInt: 2048
+fIEC870_MsgTo16BitString: 2048
+fIEC870_MsgTo16BitWord: 2048
+fIEC870_MsgTo32BitDint: 2048
+fIEC870_MsgTo32BitReal: 2048
+fIEC870_MsgTo32BitString: 2048
+fIEC870_MsgToCPxx: 2048
+fIEC870_MsgToInfObj: 2048
+fIEC870_MsgToQuality: 2048
+fIEC870_MsgToSpezialObj: 2048
+fIEC870_MsgToTlgFolge: 2048
+fIEC870_NextIC_Msg: 2048
+fIEC870_PreparatSendJob: 2048
+fIEC870_ReversInfObjRead: 2048
+fIEC870_ReversInfObjWrite: 2048
+fIEC870_SendActResponse: 2048
+fIEC870_ServeC_CD_Msg: 2048
+fIEC870_ServeC_CI_Msg: 2048
+fIEC870_ServeC_CS_Msg: 2048
+fIEC870_ServeC_IC_Msg: 2048
+fIEC870_ServeC_RD_Msg: 2048
+fIEC870_ServeC_RP_Msg: 2048
+fIEC870_ServeC_TS_Msg: 2048
+fIEC870_ServeC_XY_Msg: 2048
+fIEC870_ServeP_ME_Msg: 2048
+fIEC870_ServeRev_Msg: 2048
+fIEC870_ServerFindCInfObj: 2048
+fIEC870_ServerPriValidate: 2048
+fIEC870_SetTelegrammListPara: 2048
+fIEC870_SlaveConInterpreter: 2048
+fIEC870_WritePrivatBOOL: 2048
+fIEC870_WritePrivatBYTE: 2048
+fIEC870_WritePrivatDINT: 2048
+fIEC870_WritePrivatDWORD: 2048
+fIEC870_WritePrivatINT: 2048
+fIEC870_WritePrivatREAL: 2048
+fIEC870_WritePrivatTIME: 2048
+fIEC870_WritePrivatWORD: 2048
+IEC870_01M_Rx: 2048
+IEC870_01M_SP_NA: 2048
+IEC870_01M_SP_NA.PutData: 2048
+IEC870_02M_Rx: 2048
+IEC870_02M_SP_TA: 2048
+IEC870_02M_SP_TA.PutData: 2048
+IEC870_03M_DP_NA: 2048
+IEC870_03M_DP_NA.PutData: 2048
+IEC870_03M_Rx: 2048
+IEC870_04M_DP_TA: 2048
+IEC870_04M_DP_TA.PutData: 2048
+IEC870_04M_Rx: 2048
+IEC870_05M_Rx: 2048
+IEC870_05M_ST_NA: 2048
+IEC870_05M_ST_NA.PutData: 2048
+IEC870_06M_Rx: 2048
+IEC870_06M_ST_TA: 2048
+IEC870_06M_ST_TA.PutData: 2048
+IEC870_07M_BO_NA: 2048
+IEC870_07M_BO_NA.PutData: 2048
+IEC870_07M_Rx: 2048
+IEC870_08M_BO_TA: 2048
+IEC870_08M_BO_TA.PutData: 2048
+IEC870_08M_Rx: 2048
+IEC870_09M_ME_NA: 2048
+IEC870_09M_ME_NA.PutData: 2048
+IEC870_09M_ME_NA.RxMSG110: 2048
+IEC870_09M_Rx: 2048
+IEC870_101ClientConnection: 2048
+IEC870_101ClientConnection.Interpreter: 2048
+IEC870_101Handle: 2048
+IEC870_101Handle._Dial: 2048
+IEC870_101Handle._HangUp: 2048
+IEC870_101Handle._ModemInit: 2048
+IEC870_101Handle.Connect: 2048
+IEC870_101Handle.Send: 2048
+IEC870_101Handle.SetModemOnline: 2048
+IEC870_101MasterFB: 2048
+IEC870_101MasterFB.Set_CS: 2048
+IEC870_101MasterFB.Set_GA: 2048
+IEC870_101MasterFB.Set_ZA: 2048
+IEC870_101ServerLinkFB: 2048
+IEC870_101ServerLinkFB._DiagnoseLogg: 2048
+IEC870_101ServerLinkFB._S: 2048
+IEC870_101ServerLinkFB._SSendAck: 2048
+IEC870_101ServerLinkFB._SSendFixLenTLG: 2048
+IEC870_101ServerLinkFB._U: 2048
+IEC870_101ServerLinkFB._USendAck: 2048
+IEC870_101ServerLinkFB._USendFixLenTLG: 2048
+IEC870_101ServerLinkFB._xReadFixLenTLG: 2048
+IEC870_101ServerLinkFB._xReadFlexlenTLG: 2048
+IEC870_101ServerLinkFB._xSendFlexLenTLG: 2048
+IEC870_101ServerLinkFB.ActiveClose: 2048
+IEC870_101ServerLinkFB.RxPart: 2048
+IEC870_101ServerLinkFB.TriggerObj70: 2048
+IEC870_101SlaveConnectionFB: 2048
+IEC870_101SlaveConnectionFB._File: 2048
+IEC870_101SlaveConnectionFB.Interpreter: 2048
+IEC870_101SlaveConnectionFB.JobDistributor: 2048
+IEC870_101SlaveConnectionFB.Set_CS: 2048
+IEC870_101SlaveConnectionFB.Set_GA: 2048
+IEC870_101SlaveConnectionFB.Set_ZA: 2048
+IEC870_101SlaveConnectionFB.UpdateVisuLine: 2048
+IEC870_101SlaveLinkFB: 2048
+IEC870_101SlaveLinkFB._DiagnoseLogg: 2048
+IEC870_101SlaveLinkFB._ReadFixLenTLG: 2048
+IEC870_101SlaveLinkFB._ReadFlexLenTLG: 2048
+IEC870_101SlaveLinkFB._S: 2048
+IEC870_101SlaveLinkFB._SendFixLenTLG: 2048
+IEC870_101SlaveLinkFB._SendFlexLenTLG: 2048
+IEC870_101SlaveLinkFB._U: 2048
+IEC870_101SlaveLinkFB.RxPart: 2048
+IEC870_103ComHandle: 2048
+IEC870_103ComHandle.Send: 2048
+IEC870_104ClientConnection: 2048
+IEC870_104ClientConnection.Interpreter: 2048
+IEC870_104ClientLinkFB: 2048
+IEC870_104ClientLinkFB._CheckRxRSN: 2048
+IEC870_104ClientLinkFB._NextTxMsg: 2048
+IEC870_104ClientLinkFB.ActiveClose: 2048
+IEC870_104ClientLinkFB.RxPart: 2048
+IEC870_104ClientLinkFB.TxPart: 2048
+IEC870_104Handle_FUS: 2048
+IEC870_104Handle_FUS.Append_I: 2048
+IEC870_104Handle_FUS.Append_S: 2048
+IEC870_104Handle_FUS.Append_U: 2048
+IEC870_104Handle_FUS.Close: 2048
+IEC870_104Handle_FUS.OpenAsClient: 2048
+IEC870_104Handle_FUS.OpenAsServer: 2048
+IEC870_104Handle_FUS.Read: 2048
+IEC870_104Handle_FUS.Send_I: 2048
+IEC870_104Handle_FUS.Send_S: 2048
+IEC870_104Handle_FUS.Send_U: 2048
+IEC870_104Handle_FUS.SendLocalBuffer: 2048
+IEC870_104HandleTCP_Client: 2048
+IEC870_104HandleTCP_Client.Close: 2048
+IEC870_104HandleTCP_Client.HandleSendResult: 2048
+IEC870_104HandleTCP_Client.Open: 2048
+IEC870_104HandleTCP_Client.Read: 2048
+IEC870_104HandleTCP_Client.Write: 2048
+IEC870_104MasterFB: 2048
+IEC870_104MasterFB.Set_ClockSync: 2048
+IEC870_104MasterFB.Set_GA: 2048
+IEC870_104MasterFB.Set_ZA: 2048
+IEC870_104MultiLinkFB: 2048
+IEC870_104MultiLinkFB._Send: 2048
+IEC870_104MultiLinkFB.Close: 2048
+IEC870_104MultiLinkFB.RxPart: 2048
+IEC870_104MultiLinkFB.Send_S_Frame: 2048
+IEC870_104MultiLinkFB.TriggerObj70: 2048
+IEC870_104MultiLinkFB.TxPart: 2048
+IEC870_104MultiLinkFB.TxPartT3Tx: 2048
+IEC870_104MultiLinkServer: 2048
+IEC870_104MultiLinkServer._Open: 2048
+IEC870_104MultiLinkServer.Init: 2048
+IEC870_104MultiLinkServer.Interpreter: 2048
+IEC870_104ServerLinkFB: 2048
+IEC870_104ServerLinkFB.ActivClose_: 2048
+IEC870_104ServerLinkFB.ComFB_Close: 2048
+IEC870_104ServerLinkFB.RxPart: 2048
+IEC870_104ServerLinkFB.Send_I_Frame_: 2048
+IEC870_104ServerLinkFB.Send_S_Frame: 2048
+IEC870_104ServerLinkFB.TriggerObj70: 2048
+IEC870_104ServerLinkFB.TxPart: 2048
+IEC870_104SlaveConnectionFB: 2048
+IEC870_104SlaveConnectionFB._File: 2048
+IEC870_104SlaveConnectionFB.Interpreter: 2048
+IEC870_104SlaveConnectionFB.JobDistributor: 2048
+IEC870_104SlaveConnectionFB.Set_CS: 2048
+IEC870_104SlaveConnectionFB.Set_GA: 2048
+IEC870_104SlaveConnectionFB.Set_ZA: 2048
+IEC870_104SlaveConnectionFB.UpdateVisuLine: 2048
+IEC870_10M_ME_TA: 2048
+IEC870_10M_ME_TA.PutData: 2048
+IEC870_10M_ME_TA.RxMSG110: 2048
+IEC870_10M_Rx: 2048
+IEC870_11M_ME_NB: 2048
+IEC870_11M_ME_NB.PutData: 2048
+IEC870_11M_ME_NB.RxMSG111: 2048
+IEC870_11M_Rx: 2048
+IEC870_12M_ME_TB: 2048
+IEC870_12M_ME_TB.PutData: 2048
+IEC870_12M_ME_TB.RxMSG111: 2048
+IEC870_12M_Rx: 2048
+IEC870_13M_ME_NC: 2048
+IEC870_13M_ME_NC.PutData: 2048
+IEC870_13M_ME_NC.RxMSG112: 2048
+IEC870_13M_Rx: 2048
+IEC870_14M_ME_TC: 2048
+IEC870_14M_ME_TC.PutData: 2048
+IEC870_14M_ME_TC.RxMSG112: 2048
+IEC870_14M_Rx: 2048
+IEC870_15M_IT_NA: 2048
+IEC870_15M_IT_NA.ZW_Abfrage: 2048
+IEC870_15M_Rx: 2048
+IEC870_16M_IT_TA: 2048
+IEC870_16M_IT_TA.ZW_Abfrage: 2048
+IEC870_16M_Rx: 2048
+IEC870_17M_Rx: 2048
+IEC870_18M_Rx: 2048
+IEC870_19M_Rx: 2048
+IEC870_2ByteCopy: 2048
+IEC870_30M_Rx: 2048
+IEC870_30M_SP_TB: 2048
+IEC870_30M_SP_TB.PutData: 2048
+IEC870_31M_DP_TB: 2048
+IEC870_31M_DP_TB.PutData: 2048
+IEC870_31M_Rx: 2048
+IEC870_32M_Rx: 2048
+IEC870_32M_ST_TB: 2048
+IEC870_32M_ST_TB.PutData: 2048
+IEC870_33M_BO_TB: 2048
+IEC870_33M_BO_TB.PutData: 2048
+IEC870_33M_Rx: 2048
+IEC870_34M_ME_TD: 2048
+IEC870_34M_ME_TD.PutData: 2048
+IEC870_34M_ME_TD.RxMSG110: 2048
+IEC870_34M_Rx: 2048
+IEC870_35M_ME_TE: 2048
+IEC870_35M_ME_TE.PutData: 2048
+IEC870_35M_ME_TE.RxMSG111: 2048
+IEC870_35M_Rx: 2048
+IEC870_36M_ME_TF: 2048
+IEC870_36M_ME_TF.PutData: 2048
+IEC870_36M_ME_TF.RxMSG112: 2048
+IEC870_36M_Rx: 2048
+IEC870_37M_IT_TB: 2048
+IEC870_37M_IT_TB.ZW_Abfrage: 2048
+IEC870_37M_Rx: 2048
+IEC870_38M_Rx: 2048
+IEC870_39M_Rx: 2048
+IEC870_3ByteCopy: 2048
+IEC870_40M_Rx: 2048
+IEC870_45C_SC_NA: 2048
+IEC870_45C_SC_NA._Exe: 2048
+IEC870_45C_SC_NA._SendConfirmAck: 2048
+IEC870_45C_SC_NA._SendFinishAck: 2048
+IEC870_45C_SC_NA.SetVal: 2048
+IEC870_45C_SC_NARM: 2048
+IEC870_45C_SC_NARM._SendFeedback: 2048
+IEC870_45C_SC_NARM.PutData: 2048
+IEC870_45C_SC_NARM.PutDataGA_: 2048
+IEC870_45C_SC_NARM.SetVal: 2048
+IEC870_45M_Tx: 2048
+IEC870_46C_DC_NA: 2048
+IEC870_46C_DC_NA._Exe: 2048
+IEC870_46C_DC_NA._SendConfirmAck: 2048
+IEC870_46C_DC_NA._SendFinishAck: 2048
+IEC870_46C_DC_NA.SetVal: 2048
+IEC870_46C_DC_NARM: 2048
+IEC870_46C_DC_NARM._Input: 2048
+IEC870_46C_DC_NARM._Output: 2048
+IEC870_46C_DC_NARM._SendFeedback: 2048
+IEC870_46C_DC_NARM._SendFinishAck: 2048
+IEC870_46C_DC_NARM.PutDataGA_: 2048
+IEC870_46C_DC_NARM.SetVal: 2048
+IEC870_46M_Tx: 2048
+IEC870_47C_RC_NA: 2048
+IEC870_47C_RC_NA._Exe: 2048
+IEC870_47C_RC_NA._SendConfirmAck: 2048
+IEC870_47C_RC_NA._SendFinishAck: 2048
+IEC870_47C_RC_NA.SetVal: 2048
+IEC870_47M_Tx: 2048
+IEC870_48C_SE_NA: 2048
+IEC870_48C_SE_NA.SetVal: 2048
+IEC870_48M_Tx: 2048
+IEC870_49C_SE_NB: 2048
+IEC870_49C_SE_NB.SetVal: 2048
+IEC870_49M_Tx: 2048
+IEC870_4ByteCopy: 2048
+IEC870_50C_SE_NC: 2048
+IEC870_50C_SE_NC.SetVal: 2048
+IEC870_50M_Tx: 2048
+IEC870_51C_BO_NA: 2048
+IEC870_51C_BO_NA.SetVal: 2048
+IEC870_51M_Tx: 2048
+IEC870_58C_SC_TA: 2048
+IEC870_58C_SC_TA._Exe: 2048
+IEC870_58C_SC_TA._SendConfirmAck: 2048
+IEC870_58C_SC_TA._SendFinishAck: 2048
+IEC870_58C_SC_TA.SetVal: 2048
+IEC870_58C_SC_TARM: 2048
+IEC870_58C_SC_TARM._SendFeedback: 2048
+IEC870_58C_SC_TARM.PutData: 2048
+IEC870_58C_SC_TARM.PutDataGA_: 2048
+IEC870_58C_SC_TARM.SetVal: 2048
+IEC870_58M_Tx: 2048
+IEC870_59C_DC_TA: 2048
+IEC870_59C_DC_TA._Exe: 2048
+IEC870_59C_DC_TA._SendConfirmAck: 2048
+IEC870_59C_DC_TA._SendFinishAck: 2048
+IEC870_59C_DC_TA.SetVal: 2048
+IEC870_59C_DC_TARM: 2048
+IEC870_59C_DC_TARM._Input: 2048
+IEC870_59C_DC_TARM._Output: 2048
+IEC870_59C_DC_TARM._SendFeedback: 2048
+IEC870_59C_DC_TARM._SendFinishAck: 2048
+IEC870_59C_DC_TARM.PutDataGA_: 2048
+IEC870_59C_DC_TARM.SetVal: 2048
+IEC870_59M_Tx: 2048
+IEC870_60C_RC_TA: 2048
+IEC870_60C_RC_TA._Exe: 2048
+IEC870_60C_RC_TA._SendConfirmAck: 2048
+IEC870_60C_RC_TA._SendFinishAck: 2048
+IEC870_60C_RC_TA.SetVal: 2048
+IEC870_60M_Tx: 2048
+IEC870_61C_SE_TA: 2048
+IEC870_61C_SE_TA.SetVal: 2048
+IEC870_61M_Tx: 2048
+IEC870_62C_SE_TB: 2048
+IEC870_62C_SE_TB.SetVal: 2048
+IEC870_62M_Tx: 2048
+IEC870_63C_SE_TC: 2048
+IEC870_63C_SE_TC.SetVal: 2048
+IEC870_63M_Tx: 2048
+IEC870_64C_BO_TA: 2048
+IEC870_64C_BO_TA.SetVal: 2048
+IEC870_64M_Tx: 2048
+IEC870_6ByteCopy: 2048
+IEC870_70M_EI_NA: 2048
+IEC870_70M_EI_NA.PutData: 2048
+IEC870_7ByteCopy: 2048
+IEC870_AlarmCallEventBO: 2048
+IEC870_AlarmCallEventDP: 2048
+IEC870_AlarmCallEventMEi: 2048
+IEC870_AlarmCallEventMEr: 2048
+IEC870_AlarmCallEventSP: 2048
+IEC870_AlarmCallEventST: 2048
+IEC870_BinSearchInfoObj: 2048
+IEC870_BlubbersortInfoObj: 2048
+IEC870_C103_IObj01: 2048
+IEC870_C103_IObj02: 2048
+IEC870_C103_IObj03: 2048
+IEC870_C103_IObj03_18: 2048
+IEC870_C103_IObj04: 2048
+IEC870_C103_IObj09: 2048
+IEC870_C103_IObj09_18: 2048
+IEC870_C103_IObj20: 2048
+IEC870_C103_IObjGenericC: 2048
+IEC870_C103_IObjGenericM: 2048
+IEC870_C103_IObjPrivate: 2048
+IEC870_CmdMsg_TimeValid: 2048
+IEC870_ComWatch: 2048
+IEC870_ComWatch.LoggRx: 2048
+IEC870_ComWatch.LoggTx: 2048
+IEC870_ComWatch.Scroll: 2048
+IEC870_CP24_To_String: 2048
+IEC870_CP24Copy: 2048
+IEC870_CP56_TO_DT32: 2048
+IEC870_CP56_TO_STRING: 2048
+IEC870_CP56_TO_WDAY: 2048
+IEC870_CP56Copy: 2048
+IEC870_Cp56FormatFault: 2048
+IEC870_DST: 2048
+IEC870_DT32_TO_CP56: 2048
+IEC870_DT64_TO_CP56: 2048
+IEC870_FbArchivIT: 2048
+IEC870_FbArchivME_I: 2048
+IEC870_FbArchivME_R: 2048
+IEC870_fbDistTrans103: 2048
+IEC870_fbDistTrans103._mDump: 2048
+IEC870_fbDistTrans103._mFileOpen: 2048
+IEC870_fbDistTrans103._mInitBlk: 2048
+IEC870_fbDistTrans103.mInit: 2048
+IEC870_fbDistTrans103.mJobGenTK24: 2048
+IEC870_fbDistTrans103.mJobGenTK25: 2048
+IEC870_fbDistTrans103.mMsgReci: 2048
+IEC870_fbFUS103: 2048
+IEC870_fbFUS103.mInit: 2048
+IEC870_fbFUS103.RxDataMsg: 2048
+IEC870_fbLink103: 2048
+IEC870_fbLink103._DiagnoseLogg: 2048
+IEC870_fbLink103._NextFUS: 2048
+IEC870_fbLink103._RxPart: 2048
+IEC870_fbLink103._UReadFixLenTLG: 2048
+IEC870_fbLink103._UReadFlexlenTLG: 2048
+IEC870_fbLink103._USendAck: 2048
+IEC870_fbLink103._USendFixLenTLG: 2048
+IEC870_fbLink103._USendFlexLenTLG: 2048
+IEC870_fbLink103._USendPrivateTLG: 2048
+IEC870_fbLink103.mInit: 2048
+IEC870_FilePDU_Rx120FileReady: 2048
+IEC870_FilePDU_Rx121SectReady: 2048
+IEC870_FilePDU_Rx123Last: 2048
+IEC870_FilePDU_Rx125Segment: 2048
+IEC870_FilePDU_Rx126Directory: 2048
+IEC870_FilePDU_Tx120FileReady: 2048
+IEC870_FilePDU_Tx121SectReady: 2048
+IEC870_FilePDU_Tx122Call: 2048
+IEC870_FilePDU_Tx123Last: 2048
+IEC870_FilePDU_Tx124Ack: 2048
+IEC870_FilePDU_Tx125Segment: 2048
+IEC870_FilePDU_Tx126Directory: 2048
+IEC870_InitInfObj: 2048
+IEC870_InitInfObj.InitTlgBuffer: 2048
+IEC870_InitInfoObjClient: 2048
+IEC870_JobManager: 2048
+IEC870_JobManager.CreateNewJob: 2048
+IEC870_JobManager.Put_InfObj0XY: 2048
+IEC870_JobManager.Put_InfObj100: 2048
+IEC870_JobManager.Put_InfObj101: 2048
+IEC870_JobManager.Put_InfObj103: 2048
+IEC870_JobManager.PutAnswer: 2048
+IEC870_JobManager.PutAnswer_101USYM: 2048
+IEC870_JobManager.Reset: 2048
+IEC870_MessageGet: 2048
+IEC870_MessagePut: 2048
+IEC870_ModemAnswer: 2048
+IEC870_OpenLocalSocketFB: 2048
+IEC870_OpenLocalSocketFB.Close: 2048
+IEC870_Preprocessing_DP: 2048
+IEC870_Preprocessing_SP: 2048
+IEC870_RestartTOF: 2048
+IEC870_SetVisuLine: 2048
+IEC870_SWAP_IP: 2048
+IEC870_SyncClockOnRTC: 2048
+IEC870_SyncClockOnRTC._Minute: 2048
+IEC870_SyncClockOnRTC._SoftClock: 2048
+IEC870_SyncClockOnRTC.Init: 2048
+IEC870_TelegrammBuffer: 2048
+IEC870_TelegrammBuffer._FiFo_Init: 2048
+IEC870_TelegrammBuffer._IC_Activ: 2048
+IEC870_TelegrammBuffer._IC_Conf: 2048
+IEC870_TelegrammBuffer._INFO: 2048
+IEC870_TelegrammBuffer._PrivateL2GetMsg: 2048
+IEC870_TelegrammBuffer.FB_Init: 2048
+IEC870_TelegrammBuffer.FiFoDelMsg: 2048
+IEC870_TelegrammBuffer.FiFoGC: 2048
+IEC870_TelegrammBuffer.FiFoGetMsg: 2048
+IEC870_TelegrammBuffer.FiFoGetMsgX: 2048
+IEC870_TelegrammBuffer.FiFoPutConfirmMsg: 2048
+IEC870_TelegrammBuffer.FiFoPutFileMsg: 2048
+IEC870_TelegrammBuffer.FiFoPutFLMsg: 2048
+IEC870_TelegrammBuffer.FiFoPutMsg: 2048
+IEC870_TelegrammBuffer.FiFoQuittMsg: 2048
+IEC870_TelegrammBuffer.FiFoResetTFN: 2048
+IEC870_TelegrammBuffer.IC_Start: 2048
+IEC870_TelegrammBuffer.MoveLevel1toHistBuffer: 2048
+IEC870_TelegrammBuffer.Put_InfObj01: 2048
+IEC870_TelegrammBuffer.Put_InfObj02: 2048
+IEC870_TelegrammBuffer.Put_InfObj03: 2048
+IEC870_TelegrammBuffer.Put_InfObj04: 2048
+IEC870_TelegrammBuffer.Put_InfObj05: 2048
+IEC870_TelegrammBuffer.Put_InfObj06: 2048
+IEC870_TelegrammBuffer.Put_InfObj07: 2048
+IEC870_TelegrammBuffer.Put_InfObj08: 2048
+IEC870_TelegrammBuffer.Put_InfObj09: 2048
+IEC870_TelegrammBuffer.Put_InfObj10: 2048
+IEC870_TelegrammBuffer.Put_InfObj11: 2048
+IEC870_TelegrammBuffer.Put_InfObj12: 2048
+IEC870_TelegrammBuffer.Put_InfObj13: 2048
+IEC870_TelegrammBuffer.Put_InfObj14: 2048
+IEC870_TelegrammBuffer.Put_InfObj15: 2048
+IEC870_TelegrammBuffer.Put_InfObj16: 2048
+IEC870_TelegrammBuffer.Put_InfObj30: 2048
+IEC870_TelegrammBuffer.Put_InfObj31: 2048
+IEC870_TelegrammBuffer.Put_InfObj32: 2048
+IEC870_TelegrammBuffer.Put_InfObj33: 2048
+IEC870_TelegrammBuffer.Put_InfObj34: 2048
+IEC870_TelegrammBuffer.Put_InfObj35: 2048
+IEC870_TelegrammBuffer.Put_InfObj36: 2048
+IEC870_TelegrammBuffer.Put_InfObj37: 2048
+IEC870_TelegrammBuffer.Put_InfObj70: 2048
+IEC870_TelegrammBuffer.SetZW_Vorhanden: 2048
+IEC870_TelegrammBuffer.ZA_Ende: 2048
+IEC870_TelegrammBuffer.ZA_Start: 2048
+IEC870_Version: 2048
+prg870_SecurityInvo: 2048
+prgIEC870_MsgLogger: 2048
+prgIEC870_MsgLogger.Logg: 2048
+prgIEC870_ServerListOfASDUs: 2048
+NumOfGVLs: 3
+GVL_IEC60870_652: 2048
+IEC60870_Globale_Variablen_MA: 2048
+IEC60870_Globale_Variablen_Sl: 2048
+END_LIBRARY
+
+RESOURCE
+
+TASK IEC60870Task1 (PRIORITY := 7, INTERVAL := T#20ms);
+IEC60870_MAIN_PRG
+IEC60870_ServerPRG_1_104
+{Additional_info : 1,0,20,0,1,4294967295}
+END_TASK
+
+END_RESOURCE

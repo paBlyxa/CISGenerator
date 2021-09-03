@@ -1,0 +1,5 @@
+/target/
+/.idea/
+/.idea/.gitignore
+/cisgen.log
+/CISGenerator-v2.iml
