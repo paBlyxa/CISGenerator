@@ -168,7 +168,7 @@ public class CISGenMainApp extends Application {
     public boolean showOnlinePLCDialog(PLC plc, File file){
         try{
             FXMLLoader loader = new FXMLLoader();
-            loader.setLocation(CISGenMainApp.class.getResource("view/PLCOnlinePane.fxml"));
+            loader.setLocation(CISGenMainApp.class.getResource("PLCOnlinePane.fxml"));
             AnchorPane page = (AnchorPane) loader.load();
 
             Stage dialogStage = new Stage();
@@ -207,7 +207,7 @@ public class CISGenMainApp extends Application {
     public Set<AsciiExportField> showFilterExportFieldDialog(){
         try {
             FXMLLoader loader = new FXMLLoader();
-            loader.setLocation(CISGenMainApp.class.getResource("view/FilterExportField.fxml"));
+            loader.setLocation(CISGenMainApp.class.getResource("FilterExportField.fxml"));
             AnchorPane page = (AnchorPane) loader.load();
 
             Stage dialogStage = new Stage();
@@ -233,7 +233,7 @@ public class CISGenMainApp extends Application {
     public List<DPFilter> showFilterDialog(){
         try {
             FXMLLoader loader = new FXMLLoader();
-            loader.setLocation(CISGenMainApp.class.getResource("view/Filter.fxml"));
+            loader.setLocation(CISGenMainApp.class.getResource("Filter.fxml"));
             AnchorPane page = (AnchorPane) loader.load();
 
             Stage dialogStage = new Stage();

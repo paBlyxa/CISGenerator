@@ -71,7 +71,7 @@ public class FilterController {
 	private void handleNew(){
 		try{
 			FXMLLoader loader = new FXMLLoader();
-			loader.setLocation(CISGenMainApp.class.getResource("view/NewFilter.fxml"));
+			loader.setLocation(CISGenMainApp.class.getResource("NewFilter.fxml"));
 			AnchorPane page = (AnchorPane) loader.load();
 			
 			Stage stage = new Stage();

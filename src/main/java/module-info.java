@@ -10,4 +10,6 @@ module com.we.cisgenerator {
     opens com.we.cisgenerator.view.controller to javafx.fxml;
     exports com.we.cisgenerator;
     exports com.we.cisgenerator.view.controller;
+    exports com.we.cisgenerator.model;
+    exports com.we.cisgenerator.model.internal;
 }

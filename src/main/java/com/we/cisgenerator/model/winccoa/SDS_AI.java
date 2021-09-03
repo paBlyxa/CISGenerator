@@ -13,12 +13,12 @@ public class SDS_AI extends AI implements Dp {
 	private final static String MAX_VALUE = "1.7976931348623e+308";
 	private final static String TYPE_NAME = "SDS_AI";
 
-	private final Integer id;
+	private Integer id;
 	private String exportName = null;
 
-//	public SDS_AI() {
-//
-//	}
+	public SDS_AI() {
+
+	}
 
 	public SDS_AI(String dpName, Integer id) {
 		super(dpName);
